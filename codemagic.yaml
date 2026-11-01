@@ -1,0 +1,24 @@
+workflows:
+  android-debug:
+    name: My kolzy AI - Android APK
+    max_build_duration: 60
+    instance_type: linux_x2
+    environment:
+      java: 17
+    scripts:
+      - name: Check Java and Gradle
+        script: |
+          java -version
+          if ! command -v gradle >/dev/null 2>&1; then
+            echo "Gradle is not preinstalled; downloading Gradle 8.9"
+            curl -L --fail --retry 3 https://services.gradle.org/distributions/gradle-8.9-bin.zip -o /tmp/gradle.zip
+            unzip -q /tmp/gradle.zip -d /tmp
+            export PATH="/tmp/gradle-8.9/bin:$PATH"
+          fi
+          gradle --version
+      - name: Build debug APK
+        script: |
+          if ! command -v gradle >/dev/null 2>&1; then export PATH="/tmp/gradle-8.9/bin:$PATH"; fi
+          gradle --no-daemon --stacktrace :app:assembleDebug
+    artifacts:
+      - app/build/outputs/apk/debug/*.apk
