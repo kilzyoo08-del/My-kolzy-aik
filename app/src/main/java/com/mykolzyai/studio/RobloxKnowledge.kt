@@ -110,6 +110,39 @@ object RobloxKnowledge {
             """.trimIndent(),
             buildingTipRu = "Группируй части одного строения в Model и давай модели понятное имя."
         )
+        ,
+        Lesson(
+            id = "script_types",
+            titleRu = "Типы скриптов",
+            titleEn = "Script Types",
+            explanationRu = "Script выполняет серверную логику, LocalScript — клиентский код в поддерживаемых контейнерах, ModuleScript подключается через require. LocalScript в ServerScriptService не выполняется.",
+            exampleLuau = "-- ServerScript: ServerScriptService\n-- LocalScript: StarterPlayerScripts или StarterGui\n-- ModuleScript: повторно используемый код через require(module)",
+            buildingTipRu = "Всегда указывай точный путь в Explorer и тип скрипта."
+        ),
+        Lesson(
+            id = "remote_security",
+            titleRu = "Безопасность RemoteEvent",
+            titleEn = "RemoteEvent Security",
+            explanationRu = "Данные клиента недоверенные. Сервер проверяет типы аргументов, диапазоны, дистанцию, права и cooldown. Клиент не должен сам назначать награду или результат покупки.",
+            exampleLuau = "remote.OnServerEvent:Connect(function(player, amount)\n    if typeof(amount) ~= \"number\" then return end\n    if amount < 1 or amount > 10 then return end\n    -- Сервер проверяет игровое состояние и сам рассчитывает результат.\nend)",
+            buildingTipRu = "Все важные игровые решения подтверждай сервером."
+        ),
+        Lesson(
+            id = "nil_debugging",
+            titleRu = "Исправление ошибки nil",
+            titleEn = "Nil Debugging",
+            explanationRu = "attempt to index nil означает, что код обращается к отсутствующему значению. Проверь путь объекта, имя, момент загрузки и результат WaitForChild.",
+            exampleLuau = "local target = workspace:WaitForChild(\"TargetPart\", 10)\nif not target then\n    warn(\"TargetPart not found\")\n    return\nend\nprint(target.Name)",
+            buildingTipRu = "Не маскируй ошибку случайными задержками: найди отсутствующий объект или неверный путь."
+        ),
+        Lesson(
+            id = "model_pivot",
+            titleRu = "Перемещение модели",
+            titleEn = "Model Pivot",
+            explanationRu = "Для перемещения целой модели используй PivotTo с CFrame. Убедись, что найденный объект действительно Model.",
+            exampleLuau = "local model = workspace:WaitForChild(\"MyModel\")\nif model:IsA(\"Model\") then\n    model:PivotTo(CFrame.new(0, 5, 0))\nend",
+            buildingTipRu = "Собирай дом или мебель в Model и перемещай группу целиком."
+        )
     )
 
     fun search(query: String): List<Lesson> {
