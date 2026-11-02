@@ -37,6 +37,34 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * Локальный справочный ответ без сетевого запроса и без имитации работы LLM.
+ * Использует только встроенные уроки RobloxKnowledge.
+ */
+private fun offlineKnowledgeReply(query: String): String {
+    val matches = RobloxKnowledge.search(query, limit = 3)
+    if (matches.isEmpty()) {
+        return "Локальный режим Kolzai: языковая модель пока не подключена, " +
+            "а в офлайн-базе не найден точный материал по этому запросу. " +
+            "Попробуй спросить о переменных, условиях, функциях, Part, Model, " +
+            "типах скриптов, RemoteEvent, ошибке nil или PivotTo."
+    }
+
+    return buildString {
+        appendLine("Локальная база знаний Roblox · найдено: ${matches.size}")
+        matches.forEachIndexed { index, lesson ->
+            if (index > 0) appendLine()
+            appendLine("${index + 1}. ${lesson.titleRu}")
+            appendLine(lesson.explanationRu)
+            appendLine("Пример Luau:")
+            appendLine(lesson.exampleLuau)
+            appendLine("Для Building: ${lesson.buildingTipRu}")
+        }
+        appendLine()
+        append("Это справка из встроенной базы, не ответ подключённой ИИ-модели.")
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KolzaiChatScreen() {
@@ -96,7 +124,11 @@ fun KolzaiChatScreen() {
                             Box(Modifier.size(38.dp).background(if (draft.isBlank()) Color(0xFF555555) else TextMain, CircleShape)
                                 .clickable {
                                     if (draft.isNotBlank()) {
-                                        messages = messages + ChatMessage(draft.trim(), true)
+                                        val question = draft.trim()
+                                        messages = messages + listOf(
+                                            ChatMessage(question, true),
+                                            ChatMessage(offlineKnowledgeReply(question), false)
+                                        )
                                         draft = ""
                                     }
                                 }, contentAlignment = Alignment.Center) {
