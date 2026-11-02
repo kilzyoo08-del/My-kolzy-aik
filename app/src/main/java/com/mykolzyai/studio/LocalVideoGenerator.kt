@@ -49,7 +49,7 @@ object LocalVideoGenerator {
         val outputDir = context.getExternalFilesDir(Environment.DIRECTORY_MOVIES)
             ?: File(context.filesDir, "movies")
         if (!outputDir.exists() && !outputDir.mkdirs()) error("Не удалось создать папку видео.")
-        val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val stamp = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())
         val output = File(outputDir, "Kolzai_$stamp.mp4")
         val referenceBitmap = imageUri?.let { uri ->
             context.contentResolver.openInputStream(uri)?.use { stream ->
@@ -57,9 +57,12 @@ object LocalVideoGenerator {
                 stream.mark(64 * 1024)
                 BitmapFactory.decodeStream(stream, null, bounds)
                 val longest = maxOf(bounds.outWidth, bounds.outHeight).coerceAtLeast(1)
-                val sample = Integer.highestOneBit((longest / 1600).coerceAtLeast(1))
+                val desiredSample = kotlin.math.ceil(longest / 1600.0).toInt().coerceAtLeast(1)
+                val lowerPower = Integer.highestOneBit(desiredSample)
+                val sample = if (lowerPower < desiredSample) lowerPower shl 1 else lowerPower
                 val options = BitmapFactory.Options().apply { inSampleSize = sample }
                 context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+                    ?: throw IllegalArgumentException("Формат выбранного изображения не поддерживается.")
             } ?: throw IllegalArgumentException("Не удалось прочитать выбранное фото.")
         }
 
