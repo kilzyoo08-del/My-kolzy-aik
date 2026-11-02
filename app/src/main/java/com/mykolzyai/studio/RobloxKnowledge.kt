@@ -144,17 +144,74 @@ object RobloxKnowledge {
         )
     )
 
-    fun search(query: String): List<Lesson> {
+    /**
+     * Поиск релевантных уроков. Сначала выдаёт точные совпадения,
+     * затем уроки с наибольшим количеством совпавших терминов.
+     */
+    fun search(query: String, limit: Int = lessons.size): List<Lesson> {
         val normalized = query.trim().lowercase()
-        if (normalized.isEmpty()) return lessons
+        if (normalized.isEmpty()) return lessons.take(limit.coerceAtLeast(0))
 
-        return lessons.filter { lesson ->
-            lesson.titleRu.lowercase().contains(normalized) ||
+        val queryTokens = tokenize(normalized)
+        if (queryTokens.isEmpty()) return emptyList()
+
+        return lessons.mapNotNull { lesson ->
+            val searchable = listOf(
+                lesson.id,
+                lesson.titleRu,
+                lesson.titleEn,
+                lesson.explanationRu,
+                lesson.exampleLuau,
+                lesson.buildingTipRu
+            ).joinToString(" ").lowercase()
+
+            val lessonTokens = tokenize(searchable).toSet()
+            val matched = queryTokens.count { it in lessonTokens }
+            val phraseBonus = if (searchable.contains(normalized)) 5 else 0
+            val titleBonus = if (
+                lesson.titleRu.lowercase().contains(normalized) ||
                 lesson.titleEn.lowercase().contains(normalized) ||
-                lesson.explanationRu.lowercase().contains(normalized) ||
                 lesson.id.contains(normalized)
+            ) 8 else 0
+            val score = matched * 2 + phraseBonus + titleBonus
+
+            if (score > 0) lesson to score else null
+        }.sortedWith(
+            compareByDescending<Pair<Lesson, Int>> { it.second }
+                .thenBy { lessons.indexOf(it.first) }
+        ).take(limit.coerceAtLeast(0)).map { it.first }
+    }
+
+    /**
+     * Готовит компактный контекст для будущего подключения языковой модели.
+     * Возвращает только релевантные уроки, чтобы не отправлять всю базу знаний.
+     */
+    fun contextFor(query: String, maxLessons: Int = 4): String {
+        val relevant = search(query, maxLessons)
+        if (relevant.isEmpty()) {
+            return "Подходящих локальных материалов Roblox в базе Kolzai не найдено. " +
+                "Не выдумывай API; при необходимости сверяйся с Creator Hub."
+        }
+
+        return buildString {
+            appendLine("РЕЛЕВАНТНЫЕ МАТЕРИАЛЫ ROBLOX ИЗ БАЗЫ KOLZAI:")
+            relevant.forEachIndexed { index, lesson ->
+                appendLine()
+                appendLine("${index + 1}. ${lesson.titleRu} (${lesson.titleEn})")
+                appendLine(lesson.explanationRu)
+                appendLine("Пример Luau:")
+                appendLine(lesson.exampleLuau)
+                appendLine("Совет: ${lesson.buildingTipRu}")
+            }
+            appendLine()
+            append("Используй эти материалы как справку, но проверяй их применимость к задаче.")
         }
     }
+
+    private fun tokenize(value: String): List<String> =
+        value.lowercase()
+            .split(Regex("[^\\\\p{L}\\\\p{N}_]+"))
+            .filter { it.length >= 2 }
 
     /**
      * Инструкции для пошагового анализа задач по Roblox.
