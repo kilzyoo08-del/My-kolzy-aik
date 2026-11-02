@@ -109,8 +109,7 @@ object RobloxKnowledge {
                 model.Parent = workspace
             """.trimIndent(),
             buildingTipRu = "Группируй части одного строения в Model и давай модели понятное имя."
-        )
-        ,
+        ),
         Lesson(
             id = "script_types",
             titleRu = "Типы скриптов",
