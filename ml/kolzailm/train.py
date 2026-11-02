@@ -31,10 +31,12 @@ def load_examples(path, context):
         prompt_ids = list(prompt.encode("utf-8"))
         answer_ids = list(answer.encode("utf-8")) + [257]  # EOS is part of the answer.
 
-        # Keep the answer ending and the most recent prompt context within the model window.
-        answer_ids = answer_ids[-context:]
-        prompt_budget = max(0, context - len(answer_ids))
-        prompt_ids = prompt_ids[-prompt_budget:] if prompt_budget else []
+        # Reserve room for both sides of the example. Keep the answer beginning
+        # and the tail of the prompt so long answers do not erase the instruction.
+        answer_limit = max(1, context // 2)
+        answer_ids = answer_ids[:answer_limit]
+        prompt_budget = max(1, context - len(answer_ids))
+        prompt_ids = prompt_ids[-prompt_budget:]
         sequence = [256] + prompt_ids + answer_ids
         if len(sequence) < 2:
             continue
@@ -77,6 +79,7 @@ def main():
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--eval-every", type=int, default=100)
     p.add_argument("--out", default="ml/kolzailm/checkpoints/kolai-instruct.pt")
+    p.add_argument("--init-checkpoint", default="", help="Continue from a previous Kolai checkpoint")
     args = p.parse_args()
 
     random.seed(args.seed)
@@ -90,6 +93,12 @@ def main():
     print(f"Loaded {len(examples)} examples; train={len(train_examples)}, validation={len(val_examples)}")
 
     model = KolzaiLM(args.width, args.heads, args.layers, args.context).to(device)
+    if args.init_checkpoint:
+        saved = torch.load(args.init_checkpoint, map_location=device)
+        if saved.get("config") != model.config:
+            raise SystemExit("Checkpoint config does not match width/heads/layers/context")
+        model.load_state_dict(saved["model"])
+        print(f"Warm-started from {args.init_checkpoint}")
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
     @torch.no_grad()
@@ -119,7 +128,7 @@ def main():
 
     output = Path(args.out)
     output.parent.mkdir(parents=True, exist_ok=True)
-    torch.save({
+    checkpoint = {
         "model_name": "Kolai",
         "training_type": "answer_only_instruction_finetuning",
         "config": model.config,
@@ -127,7 +136,12 @@ def main():
         "vocab_size": VOCAB_SIZE,
         "training_examples": len(examples),
         "seed": args.seed,
-    }, output)
+        "context": args.context,
+    }
+    # Atomic replacement preserves the previous checkpoint if saving is interrupted.
+    temporary = output.with_suffix(output.suffix + ".tmp")
+    torch.save(checkpoint, temporary)
+    temporary.replace(output)
     print(f"Saved checkpoint: {output.resolve()}")
 
 
