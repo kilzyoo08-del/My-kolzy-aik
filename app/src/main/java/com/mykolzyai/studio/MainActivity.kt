@@ -136,26 +136,35 @@ fun KolzaiChatScreen() {
                                     textStyle = LocalTextStyle.current.copy(color = TextMain, fontSize = 16.sp), maxLines = 5)
                             }
                             Spacer(Modifier.width(10.dp))
-                            Box(Modifier.size(38.dp).background(if (draft.isBlank()) Color(0xFF555555) else TextMain, CircleShape)
+                            Box(Modifier.size(38.dp).background(if (draft.isBlank() && chatPhotoUri == null) Color(0xFF555555) else TextMain, CircleShape)
                                 .clickable {
-                                    if (draft.isNotBlank()) {
-                                        val question = draft.trim()
+                                    if (!isThinking && (draft.isNotBlank() || chatPhotoUri != null)) {
+                                        val question = draft.trim().ifBlank { "Расскажи, что можно сделать с прикреплённым фото." }
                                         val image = chatPhotoUri
                                         messages = messages + ChatMessage(question, true, image)
                                         draft = ""
                                         chatPhotoUri = null
                                         isThinking = true
-                                        thinkingStage = "Поиск по локальной базе…"
-                                        val answer = offlineKnowledgeReply(question, image != null)
-                                        messages = messages + ChatMessage(answer, false)
-                                        isThinking = false
-                                        thinkingStage = ""
+                                        thinkingStage = "Поиск по локальной базе знаний…"
+                                        Thread {
+                                            val answer = offlineKnowledgeReply(question, image != null)
+                                            mainHandler.post {
+                                                messages = messages + ChatMessage(answer, false)
+                                                isThinking = false
+                                                thinkingStage = ""
+                                            }
+                                        }.start()
                                     }
                                 }, contentAlignment = Alignment.Center) {
                                 Text("↑", color = Bg, fontSize = 23.sp, fontWeight = FontWeight.Bold)
                             }
                         }
-                        Text("Ответы ИИ подключим отдельно.", color = TextMuted, fontSize = 10.sp,
+                        chatPhotoUri?.let { selected ->
+                            AsyncImage(model = selected, contentDescription = "Фото к сообщению",
+                                modifier = Modifier.size(58.dp).padding(top = 5.dp))
+                        }
+                        Text(if (isThinking) thinkingStage else "Локальная база знаний · ИИ-модель не подключена",
+                            color = if (isThinking) Accent else TextMuted, fontSize = 10.sp,
                             modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 7.dp))
                     }
                 }
