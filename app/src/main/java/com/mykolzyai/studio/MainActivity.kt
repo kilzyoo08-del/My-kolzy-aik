@@ -3,6 +3,8 @@ package com.mykolzyai.studio
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -42,23 +44,26 @@ fun KolzaiChatScreen() {
     var selectedTab by remember { mutableStateOf("Чат") }
     var showHistory by remember { mutableStateOf(false) }
     var messages by remember { mutableStateOf(listOf<ChatMessage>()) }
+    var videoPrompt by remember { mutableStateOf("") }
+    var duration by remember { mutableStateOf("5 секунд") }
+    var ratio by remember { mutableStateOf("16:9") }
+    var photoUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        photoUri = uri
+    }
 
     MaterialTheme(colorScheme = darkColorScheme(
-        primary = Accent,
-        background = Bg,
-        surface = SurfaceDark,
-        onBackground = TextMain,
-        onSurface = TextMain
+        primary = Accent, background = Bg, surface = SurfaceDark,
+        onBackground = TextMain, onSurface = TextMain
     )) {
         Scaffold(
             containerColor = Bg,
             topBar = {
                 TopAppBar(
                     title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column {
                             Text("Kolzai", fontWeight = FontWeight.Bold, fontSize = 21.sp)
-                            Spacer(Modifier.width(8.dp))
-                            Text("⌄", color = TextMuted, fontSize = 20.sp)
+                            Text(if (selectedTab == "Видео") "Создание видео" else "ИИ-помощник", color = TextMuted, fontSize = 11.sp)
                         }
                     },
                     navigationIcon = {
@@ -67,63 +72,128 @@ fun KolzaiChatScreen() {
                     },
                     actions = {
                         Text("＋", color = TextMain, fontSize = 27.sp,
-                            modifier = Modifier.clickable { messages = emptyList() }.padding(horizontal = 18.dp))
+                            modifier = Modifier.clickable { messages = emptyList(); videoPrompt = ""; photoUri = null }
+                                .padding(horizontal = 18.dp))
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Bg, titleContentColor = TextMain)
                 )
             },
             bottomBar = {
-                Column(Modifier.fillMaxWidth().background(Bg).padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 10.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().background(SurfaceDark, RoundedCornerShape(28.dp)).padding(horizontal = 15.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("＋", color = TextMuted, fontSize = 25.sp, modifier = Modifier.padding(end = 10.dp))
-                        Box(Modifier.weight(1f)) {
-                            if (draft.isEmpty()) Text("Спроси Kolzai", color = TextMuted)
-                            BasicTextField(
-                                value = draft,
-                                onValueChange = { draft = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                textStyle = LocalTextStyle.current.copy(color = TextMain, fontSize = 16.sp),
-                                maxLines = 5
-                            )
-                        }
-                        Spacer(Modifier.width(10.dp))
-                        Box(
-                            Modifier.size(38.dp).background(if (draft.isBlank()) Color(0xFF555555) else TextMain, CircleShape)
+                if (selectedTab == "Чат") {
+                    Column(Modifier.fillMaxWidth().background(Bg).padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 10.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth().background(SurfaceDark, RoundedCornerShape(28.dp)).padding(horizontal = 15.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("＋", color = TextMuted, fontSize = 25.sp, modifier = Modifier.padding(end = 10.dp))
+                            Box(Modifier.weight(1f)) {
+                                if (draft.isEmpty()) Text("Спроси Kolzai", color = TextMuted)
+                                BasicTextField(value = draft, onValueChange = { draft = it },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textStyle = LocalTextStyle.current.copy(color = TextMain, fontSize = 16.sp), maxLines = 5)
+                            }
+                            Spacer(Modifier.width(10.dp))
+                            Box(Modifier.size(38.dp).background(if (draft.isBlank()) Color(0xFF555555) else TextMain, CircleShape)
                                 .clickable {
                                     if (draft.isNotBlank()) {
                                         messages = messages + ChatMessage(draft.trim(), true)
                                         draft = ""
                                     }
-                                },
-                            contentAlignment = Alignment.Center
-                        ) { Text("↑", color = Bg, fontSize = 23.sp, fontWeight = FontWeight.Bold) }
+                                }, contentAlignment = Alignment.Center) {
+                                Text("↑", color = Bg, fontSize = 23.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        Text("Ответы ИИ подключим отдельно.", color = TextMuted, fontSize = 10.sp,
+                            modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 7.dp))
                     }
-                    Text("Kolzai может ошибаться. Подключение ИИ-модели добавим отдельно.", color = TextMuted,
-                        fontSize = 10.sp, modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 7.dp))
                 }
             }
         ) { padding ->
             Row(Modifier.fillMaxSize().padding(padding)) {
                 if (showHistory) {
-                    Column(Modifier.width(230.dp).fillMaxHeight().background(Color(0xFF191919)).padding(14.dp)) {
-                        Text("Новый чат", color = TextMain, modifier = Modifier.fillMaxWidth()
-                            .clickable { messages = emptyList(); showHistory = false }.padding(vertical = 14.dp))
+                    Column(Modifier.width(210.dp).fillMaxHeight().background(Color(0xFF191919)).padding(14.dp)) {
+                        Text("Новый чат", color = TextMain, modifier = Modifier.clickable {
+                            messages = emptyList(); showHistory = false
+                        }.padding(vertical = 14.dp))
                         Divider(color = Color.DarkGray)
-                        Text("История чатов появится здесь", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 16.dp))
-                        Spacer(Modifier.weight(1f))
-                        Text("Настройки", color = TextMain, modifier = Modifier.padding(vertical = 12.dp))
+                        Text("История появится здесь", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 16.dp))
                     }
                 }
                 Column(Modifier.weight(1f).fillMaxHeight()) {
-                    if (messages.isEmpty()) {
-                        Column(
-                            Modifier.fillMaxSize().padding(horizontal = 24.dp),
-                            verticalArrangement = Arrangement.Center,
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)
+                        .background(SurfaceDark, RoundedCornerShape(24.dp)).padding(4.dp)) {
+                        listOf("Чат", "Видео").forEach { tab ->
+                            Box(Modifier.weight(1f).background(if (selectedTab == tab) Color(0xFF55515F) else Color.Transparent,
+                                RoundedCornerShape(20.dp)).clickable { selectedTab = tab }.padding(vertical = 11.dp),
+                                contentAlignment = Alignment.Center) {
+                                Text(if (tab == "Видео") "🎬 Видео" else "✦ Чат",
+                                    color = TextMain, fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.Normal)
+                            }
+                        }
+                    }
+
+                    if (selectedTab == "Видео") {
+                        LazyColumn(Modifier.fillMaxSize().padding(horizontal = 18.dp),
+                            contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            item {
+                                Spacer(Modifier.height(12.dp))
+                                Text("Создай своё видео", color = TextMain, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                                Text("Опиши сцену или добавь фото, которое нужно оживить.", color = TextMuted,
+                                    fontSize = 14.sp, modifier = Modifier.padding(top = 6.dp, bottom = 10.dp))
+                            }
+                            item {
+                                Text("Описание видео", color = TextMain, fontWeight = FontWeight.SemiBold)
+                                Spacer(Modifier.height(8.dp))
+                                Box(Modifier.fillMaxWidth().background(SurfaceDark, RoundedCornerShape(16.dp)).padding(14.dp)) {
+                                    if (videoPrompt.isEmpty()) Text("Например: кинематографичный вид футуристического города на закате…",
+                                        color = TextMuted, fontSize = 14.sp)
+                                    BasicTextField(videoPrompt, { videoPrompt = it }, Modifier.fillMaxWidth().heightIn(min = 110.dp),
+                                        textStyle = LocalTextStyle.current.copy(color = TextMain, fontSize = 15.sp))
+                                }
+                            }
+                            item {
+                                Text("Фото для оживления (необязательно)", color = TextMain, fontWeight = FontWeight.SemiBold)
+                                Spacer(Modifier.height(8.dp))
+                                Surface(color = SurfaceDark, shape = RoundedCornerShape(14.dp),
+                                    modifier = Modifier.fillMaxWidth().clickable { photoPicker.launch("image/*") }) {
+                                    Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text(if (photoUri == null) "＋  Выбрать фото" else "✓  Фото выбрано",
+                                            color = TextMain, fontWeight = FontWeight.Medium)
+                                        Text(photoUri?.lastPathSegment ?: "Нажми, чтобы выбрать изображение на телефоне",
+                                            color = TextMuted, fontSize = 11.sp, modifier = Modifier.padding(top = 5.dp))
+                                    }
+                                }
+                            }
+                            item {
+                                Text("Длительность", color = TextMain, fontWeight = FontWeight.SemiBold)
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                                    listOf("5 секунд", "10 секунд").forEach { value ->
+                                        ChoicePill(value, duration == value) { duration = value }
+                                    }
+                                }
+                            }
+                            item {
+                                Text("Формат видео", color = TextMain, fontWeight = FontWeight.SemiBold)
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                                    listOf("16:9", "9:16", "1:1").forEach { value ->
+                                        ChoicePill(value, ratio == value) { ratio = value }
+                                    }
+                                }
+                            }
+                            item {
+                                Spacer(Modifier.height(6.dp))
+                                Button(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth().height(52.dp),
+                                    shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(
+                                        disabledContainerColor = Color(0xFF514B60), disabledContentColor = TextMain)) {
+                                    Text("Создать видео", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Text("Генерация пока не подключена. Сейчас мы создаём интерфейс; следующим шагом подключим модель и сервер Kolzai.",
+                                    color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 9.dp))
+                            }
+                        }
+                    } else if (messages.isEmpty()) {
+                        Column(Modifier.fillMaxSize().padding(horizontal = 24.dp),
+                            verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                             Box(Modifier.size(58.dp).background(SurfaceDark, CircleShape), contentAlignment = Alignment.Center) {
                                 Text("K", color = TextMain, fontWeight = FontWeight.Bold, fontSize = 29.sp)
                             }
@@ -140,22 +210,17 @@ fun KolzaiChatScreen() {
                             SuggestionChip("Помоги с кодом") { draft = "Помоги разобраться с кодом" }
                         }
                     } else {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                            contentPadding = PaddingValues(vertical = 18.dp),
-                            verticalArrangement = Arrangement.spacedBy(18.dp)
-                        ) {
+                        LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                            contentPadding = PaddingValues(vertical = 18.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
                             items(messages) { message ->
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.fromUser) Arrangement.End else Arrangement.Start) {
-                                    Text(message.text, color = TextMain, modifier = Modifier
-                                        .widthIn(max = 300.dp)
-                                        .background(if (message.fromUser) SurfaceDark else Bg, RoundedCornerShape(18.dp))
-                                        .padding(13.dp))
+                                    Text(message.text, color = TextMain, modifier = Modifier.widthIn(max = 300.dp)
+                                        .background(if (message.fromUser) SurfaceDark else Bg, RoundedCornerShape(18.dp)).padding(13.dp))
                                 }
                             }
                             item {
-                                Text("Интерфейс чата готов. Чтобы Kolzai отвечал на сообщения, следующим шагом подключим языковую модель через API.",
-                                    color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
+                                Text("Подключение языковой модели добавим отдельно.", color = TextMuted,
+                                    fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
                             }
                         }
                     }
@@ -166,12 +231,16 @@ fun KolzaiChatScreen() {
 }
 
 @Composable
+private fun ChoicePill(label: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(color = if (selected) Color(0xFF514B60) else SurfaceDark,
+        shape = RoundedCornerShape(18.dp), modifier = Modifier.clickable(onClick = onClick)) {
+        Text(label, color = TextMain, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
+    }
+}
+
+@Composable
 private fun SuggestionChip(label: String, onClick: () -> Unit) {
-    Surface(
-        color = SurfaceDark,
-        shape = RoundedCornerShape(20.dp),
-        modifier = Modifier.clickable(onClick = onClick)
-    ) {
+    Surface(color = SurfaceDark, shape = RoundedCornerShape(20.dp), modifier = Modifier.clickable(onClick = onClick)) {
         Text(label, color = TextMain, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp))
     }
 }
