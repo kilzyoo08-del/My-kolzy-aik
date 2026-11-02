@@ -182,7 +182,7 @@ fun KolzaiChatScreen() {
                                         draft = ""
                                         chatPhotoUri = null
                                         isThinking = true
-                                        thinkingStage = "Поиск по локальной базе знаний…"
+                                        thinkingStage = if (wantsWebSearch(question)) "Поиск страниц в интернете…" else "Анализ запроса и поиск в локальной базе…"
                                         Thread {
                                             val answer = try {
                                                 if (image == null && wantsWebSearch(question)) {
