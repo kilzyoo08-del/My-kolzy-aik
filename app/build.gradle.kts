@@ -15,6 +15,7 @@ android {
         targetSdk = 34
         versionCode = 2
         versionName = "1.1"
+        buildConfigField("String", "VIDEO_BACKEND_URL", "\"$videoBackendUrl\"")
     }
 
     buildFeatures {
@@ -22,9 +23,6 @@ android {
         buildConfig = true
     }
 
-    defaultConfig {
-        buildConfigField("String", "VIDEO_BACKEND_URL", "\"$videoBackendUrl\"")
-    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
