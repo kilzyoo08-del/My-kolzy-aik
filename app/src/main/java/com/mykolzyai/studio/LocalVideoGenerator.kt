@@ -4,6 +4,10 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Rect
+import android.net.Uri
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
@@ -29,6 +33,7 @@ object LocalVideoGenerator {
         prompt: String,
         durationSeconds: Int,
         aspectRatio: String,
+        imageUri: Uri? = null,
         onProgress: (Int) -> Unit
     ): ResultFile {
         require(prompt.isNotBlank()) { "Сначала опиши видео." }
@@ -46,6 +51,17 @@ object LocalVideoGenerator {
         if (!outputDir.exists() && !outputDir.mkdirs()) error("Не удалось создать папку видео.")
         val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val output = File(outputDir, "Kolzai_$stamp.mp4")
+        val referenceBitmap = imageUri?.let { uri ->
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                stream.mark(64 * 1024)
+                BitmapFactory.decodeStream(stream, null, bounds)
+                val longest = maxOf(bounds.outWidth, bounds.outHeight).coerceAtLeast(1)
+                val sample = Integer.highestOneBit((longest / 1600).coerceAtLeast(1))
+                val options = BitmapFactory.Options().apply { inSampleSize = sample }
+                context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+            } ?: throw IllegalArgumentException("Не удалось прочитать выбранное фото.")
+        }
 
         val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.COLOR_FormatSurface)
@@ -103,7 +119,7 @@ object LocalVideoGenerator {
             for (frame in 0 until totalFrames) {
                 val canvas = surface.lockCanvas(null)
                 try {
-                    drawFrame(canvas, width, height, frame, totalFrames, prompt)
+                    drawFrame(canvas, width, height, frame, totalFrames, prompt, referenceBitmap)
                 } finally {
                     surface.unlockCanvasAndPost(canvas)
                 }
@@ -118,6 +134,7 @@ object LocalVideoGenerator {
             return ResultFile(output, width, height, durationSeconds)
         } catch (error: Throwable) {
             output.delete()
+            referenceBitmap?.recycle()
             throw error
         } finally {
             runCatching { encoder.stop() }
@@ -125,10 +142,11 @@ object LocalVideoGenerator {
             runCatching { encoder.release() }
             if (muxerStarted) runCatching { muxer?.stop() }
             runCatching { muxer?.release() }
+            if (referenceBitmap?.isRecycled == false) referenceBitmap.recycle()
         }
     }
 
-    private fun drawFrame(canvas: Canvas, width: Int, height: Int, frame: Int, total: Int, prompt: String) {
+    private fun drawFrame(canvas: Canvas, width: Int, height: Int, frame: Int, total: Int, prompt: String, photo: Bitmap?) {
         val progress = frame.toFloat() / total.coerceAtLeast(1)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         val background = Paint().apply {
@@ -139,6 +157,18 @@ object LocalVideoGenerator {
             )
         }
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), background)
+        if (photo != null && !photo.isRecycled) {
+            val scale = maxOf(width.toFloat() / photo.width, height.toFloat() / photo.height)
+            val cropWidth = width / scale
+            val cropHeight = height / scale
+            val left = ((photo.width - cropWidth) / 2f).toInt()
+            val top = ((photo.height - cropHeight) / 2f).toInt()
+            val source = Rect(left, top, (left + cropWidth).toInt().coerceAtMost(photo.width),
+                (top + cropHeight).toInt().coerceAtMost(photo.height))
+            canvas.drawBitmap(photo, source, Rect(0, 0, width, height), Paint(Paint.ANTI_ALIAS_FLAG))
+            paint.color = Color.argb(105, 5, 8, 20)
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+        }
 
         val centerX = width * (0.5f + 0.12f * sin(progress * Math.PI * 2).toFloat())
         val centerY = height * (0.42f + 0.08f * cos(progress * Math.PI * 2).toFloat())
