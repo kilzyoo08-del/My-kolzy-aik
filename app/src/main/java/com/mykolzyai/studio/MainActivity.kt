@@ -32,7 +32,7 @@ private val TextMain = Color(0xFFECECEC)
 private val TextMuted = Color(0xFF9B9B9B)
 private val Accent = Color(0xFFB9A4FF)
 
-data class ChatMessage(val text: String, val fromUser: Boolean)
+data class ChatMessage(val text: String, val fromUser: Boolean, val imageUri: android.net.Uri? = null)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -45,7 +45,8 @@ class MainActivity : ComponentActivity() {
  * Локальный справочный ответ без сетевого запроса и без имитации работы LLM.
  * Использует только встроенные уроки RobloxKnowledge.
  */
-private fun offlineKnowledgeReply(query: String): String {
+private fun offlineKnowledgeReply(query: String, hasImage: Boolean = false): String {
+    if (hasImage) return "Фото прикреплено, но визуальная ИИ-модель пока не подключена. Я могу обработать текст и локальную базу Roblox, но не буду утверждать, что распознал изображение."
     val matches = RobloxKnowledge.search(query, limit = 3)
     if (matches.isEmpty()) {
         return "Локальный режим Kolzai: языковая модель пока не подключена, " +
@@ -73,6 +74,9 @@ private fun offlineKnowledgeReply(query: String): String {
 @Composable
 fun KolzaiChatScreen() {
     var draft by remember { mutableStateOf("") }
+    var chatPhotoUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var isThinking by remember { mutableStateOf(false) }
+    var thinkingStage by remember { mutableStateOf("") }
     var selectedTab by remember { mutableStateOf("Чат") }
     var showHistory by remember { mutableStateOf(false) }
     var messages by remember { mutableStateOf(listOf<ChatMessage>()) }
@@ -86,6 +90,7 @@ fun KolzaiChatScreen() {
     var generationError by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    val chatPhotoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> chatPhotoUri = uri }
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         photoUri = uri
     }
@@ -123,7 +128,7 @@ fun KolzaiChatScreen() {
                             Modifier.fillMaxWidth().background(SurfaceDark, RoundedCornerShape(28.dp)).padding(horizontal = 15.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("＋", color = TextMuted, fontSize = 25.sp, modifier = Modifier.padding(end = 10.dp))
+                            Text("＋", color = TextMuted, fontSize = 25.sp, modifier = Modifier.clickable { chatPhotoPicker.launch("image/*") }.padding(end = 10.dp))
                             Box(Modifier.weight(1f)) {
                                 if (draft.isEmpty()) Text("Спроси Kolzai", color = TextMuted)
                                 BasicTextField(value = draft, onValueChange = { draft = it },
@@ -135,11 +140,16 @@ fun KolzaiChatScreen() {
                                 .clickable {
                                     if (draft.isNotBlank()) {
                                         val question = draft.trim()
-                                        messages = messages + listOf(
-                                            ChatMessage(question, true),
-                                            ChatMessage(offlineKnowledgeReply(question), false)
-                                        )
+                                        val image = chatPhotoUri
+                                        messages = messages + ChatMessage(question, true, image)
                                         draft = ""
+                                        chatPhotoUri = null
+                                        isThinking = true
+                                        thinkingStage = "Поиск по локальной базе…"
+                                        val answer = offlineKnowledgeReply(question, image != null)
+                                        messages = messages + ChatMessage(answer, false)
+                                        isThinking = false
+                                        thinkingStage = ""
                                     }
                                 }, contentAlignment = Alignment.Center) {
                                 Text("↑", color = Bg, fontSize = 23.sp, fontWeight = FontWeight.Bold)
@@ -314,8 +324,15 @@ fun KolzaiChatScreen() {
                             contentPadding = PaddingValues(vertical = 18.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
                             items(messages) { message ->
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = if (message.fromUser) Arrangement.End else Arrangement.Start) {
-                                    Text(message.text, color = TextMain, modifier = Modifier.widthIn(max = 300.dp)
-                                        .background(if (message.fromUser) SurfaceDark else Bg, RoundedCornerShape(18.dp)).padding(13.dp))
+                                    Column(Modifier.widthIn(max = 300.dp)
+                                        .background(if (message.fromUser) SurfaceDark else Bg, RoundedCornerShape(18.dp)).padding(13.dp)) {
+                                        message.imageUri?.let { image ->
+                                            AsyncImage(model = image, contentDescription = "Прикреплённое фото",
+                                                modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp))
+                                            Spacer(Modifier.height(8.dp))
+                                        }
+                                        Text(message.text, color = TextMain)
+                                    }
                                 }
                             }
                             item {
