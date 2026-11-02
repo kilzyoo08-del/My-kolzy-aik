@@ -47,26 +47,39 @@ class MainActivity : ComponentActivity() {
  */
 private fun offlineKnowledgeReply(query: String, hasImage: Boolean = false): String {
     if (hasImage) return "Фото прикреплено, но визуальная ИИ-модель пока не подключена. Я могу обработать текст и локальную базу Roblox, но не буду утверждать, что распознал изображение."
+
+    LocalReasoningEngine.solveMathQuestion(query)?.let { result ->
+        return buildString {
+            appendLine("Решение Kolzai")
+            appendLine()
+            appendLine("Разберём выражение по порядку действий:")
+            result.steps.forEachIndexed { index, step ->
+                appendLine("${index + 1}. $step")
+            }
+            appendLine()
+            append("Ответ: ${result.answer}")
+        }
+    }
+
     val matches = RobloxKnowledge.search(query, limit = 3)
     if (matches.isEmpty()) {
-        return "Локальный режим Kolzai: языковая модель пока не подключена, " +
-            "а в офлайн-базе не найден точный материал по этому запросу. " +
-            "Попробуй спросить о переменных, условиях, функциях, Part, Model, " +
-            "типах скриптов, RemoteEvent, ошибке nil или PivotTo."
+        return "Пока не могу надёжно ответить на этот вопрос в автономном режиме. " +
+            "Сейчас Kolzai умеет пошагово решать простые арифметические выражения " +
+            "и искать сведения во встроенной базе Roblox. Полноценная языковая модель ещё не подключена."
     }
 
     return buildString {
-        appendLine("Локальная база знаний Roblox · найдено: ${matches.size}")
+        appendLine("Разбор по базе знаний Roblox · найдено: ${matches.size}")
         matches.forEachIndexed { index, lesson ->
             if (index > 0) appendLine()
             appendLine("${index + 1}. ${lesson.titleRu}")
             appendLine(lesson.explanationRu)
             appendLine("Пример Luau:")
             appendLine(lesson.exampleLuau)
-            appendLine("Для Building: ${lesson.buildingTipRu}")
+            appendLine("Совет для Building: ${lesson.buildingTipRu}")
         }
         appendLine()
-        append("Это справка из встроенной базы, не ответ подключённой ИИ-модели.")
+        append("Это проверяемая справка из локальной базы, а не свободное рассуждение языковой модели.")
     }
 }
 
