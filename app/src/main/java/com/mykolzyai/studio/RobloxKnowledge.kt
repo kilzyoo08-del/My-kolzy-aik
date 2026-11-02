@@ -210,7 +210,7 @@ object RobloxKnowledge {
 
     private fun tokenize(value: String): List<String> =
         value.lowercase()
-            .split(Regex("[^\\\\p{L}\\\\p{N}_]+"))
+            .split(Regex("[^\\p{L}\\p{N}_]+"))
             .filter { it.length >= 2 }
 
     /**
