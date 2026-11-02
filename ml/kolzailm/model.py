@@ -76,7 +76,7 @@ class KolzaiLM(nn.Module):
         logits = self.lm_head(self.final_norm(self.blocks(x)))
         loss = None
         if targets is not None:
-            loss = F.cross_entropy(logits.reshape(-1, VOCAB_SIZE), targets.reshape(-1))
+            loss = F.cross_entropy(logits.reshape(-1, VOCAB_SIZE), targets.reshape(-1), ignore_index=-100)
         return logits, loss
 
 def encode(text: str):
