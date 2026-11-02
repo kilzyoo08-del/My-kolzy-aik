@@ -117,7 +117,7 @@ class VideoGenerationRepository(
                 id = json.optString("job_id"),
                 status = json.optString("status", "queued"),
                 progress = if (json.has("progress") && !json.isNull("progress")) json.optInt("progress") else null,
-                resultUrl = result?.optString("url)?.takeIf { it.isNotBlank() },
+                resultUrl = result?.optString("url")?.takeIf { it.isNotBlank() },
                 error = json.optJSONObject("error")?.optString("message")
             ).also {
                 if (it.id.isBlank()) throw IllegalStateException("Сервер не вернул job_id.")
