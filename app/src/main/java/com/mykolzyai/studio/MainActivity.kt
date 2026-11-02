@@ -241,13 +241,15 @@ fun KolzaiChatScreen() {
                                             val promptSnapshot = videoPrompt.trim()
                                             val secondsSnapshot = duration.substringBefore(" ").toIntOrNull() ?: 5
                                             val ratioSnapshot = ratio
+                                            val photoSnapshot = photoUri
                                             Thread {
                                                 try {
                                                     val result = LocalVideoGenerator.generate(
                                                         context = context,
                                                         prompt = promptSnapshot,
                                                         durationSeconds = secondsSnapshot,
-                                                        aspectRatio = ratioSnapshot
+                                                        aspectRatio = ratioSnapshot,
+                                                        imageUri = photoSnapshot
                                                     ) { value ->
                                                         mainHandler.post { generationProgress = value }
                                                     }
@@ -285,7 +287,7 @@ fun KolzaiChatScreen() {
                                     Text("Видео готово: $path", color = Color(0xFF9FE3B0),
                                         fontSize = 12.sp, modifier = Modifier.padding(top = 9.dp))
                                 }
-                                Text("Важно: это локальный процедурный рендерер графической сцены, а не нейросеть text-to-video. Выбранное фото пока сохраняется как вложение интерфейса и ещё не используется при рендеринге.",
+                                Text("Локальный рендерер использует выбранное фото как фон и добавляет анимацию, текст и эффекты. Это процедурная анимация, а не нейросеть text-to-video.",
                                     color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 9.dp))
                             }
                         }
