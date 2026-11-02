@@ -70,7 +70,7 @@ fun StudioScreen(context: Context) {
         onBackground = Color.White, onSurface = Color.White)) {
         Scaffold(containerColor = Ink, topBar = {
             TopAppBar(title = { Column {
-                Text("My-kolzy AI", fontWeight = FontWeight.Bold)
+                Text("My Kolzy AI", fontWeight = FontWeight.Bold)
                 Text("AI-видеостудия • Android 14", style = MaterialTheme.typography.labelSmall, color = Muted)
             } }, colors = TopAppBarDefaults.topAppBarColors(containerColor = Ink, titleContentColor = Color.White))
         }) { padding ->
