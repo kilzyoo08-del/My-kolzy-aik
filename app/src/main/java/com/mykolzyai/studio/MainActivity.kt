@@ -83,6 +83,30 @@ private fun offlineKnowledgeReply(query: String, hasImage: Boolean = false): Str
     }
 }
 
+private fun wantsWebSearch(query: String): Boolean {
+    val text = query.lowercase()
+    return listOf("найди", "поищи", "поиск в интернете", "в интернете", "на сайтах",
+        "источники", "ссылки", "последние новости", "актуальная информация",
+        "что сейчас", "сегодня").any { it in text }
+}
+
+private fun webSearchReply(query: String): String {
+    val results = WebSearchClient.search(query, limit = 5)
+    if (results.isEmpty()) return "Поиск завершился, но поисковая система не вернула доступных результатов."
+    return buildString {
+        appendLine("Результаты поиска в интернете")
+        appendLine("Нашёл ${results.size} страниц. Это выдержки из поисковой выдачи, а не проверенный фактологический вывод.")
+        results.forEachIndexed { index, result ->
+            appendLine()
+            appendLine("${index + 1}. ${result.title}")
+            if (result.snippet.isNotBlank()) appendLine(result.snippet)
+            appendLine(result.url)
+        }
+        appendLine()
+        append("Открой источники и сверяй важные сведения по нескольким независимым страницам.")
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KolzaiChatScreen() {
@@ -160,7 +184,15 @@ fun KolzaiChatScreen() {
                                         isThinking = true
                                         thinkingStage = "Поиск по локальной базе знаний…"
                                         Thread {
-                                            val answer = offlineKnowledgeReply(question, image != null)
+                                            val answer = try {
+                                                if (image == null && wantsWebSearch(question)) {
+                                                    webSearchReply(question)
+                                                } else {
+                                                    offlineKnowledgeReply(question, image != null)
+                                                }
+                                            } catch (error: Exception) {
+                                                "Не удалось выполнить поиск: ${error.message ?: "проверь подключение к интернету"}. Попробуй ещё раз позже."
+                                            }
                                             mainHandler.post {
                                                 messages = messages + ChatMessage(answer, false)
                                                 isThinking = false
