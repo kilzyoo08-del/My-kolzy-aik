@@ -5,6 +5,7 @@ plugins {
 }
 
 android {
+    val videoBackendUrl = providers.gradleProperty("VIDEO_BACKEND_URL").orNull ?: ""
     namespace = "com.mykolzyai.studio"
     compileSdk = 35
 
@@ -18,6 +19,11 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+
+    defaultConfig {
+        buildConfigField("String", "VIDEO_BACKEND_URL", "\"$videoBackendUrl\"")
     }
 
     compileOptions {
