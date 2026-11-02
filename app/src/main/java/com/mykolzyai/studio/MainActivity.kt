@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import coil.compose.AsyncImage
 
 private val Bg = Color(0xFF212121)
 private val SurfaceDark = Color(0xFF2F2F2F)
@@ -202,6 +203,13 @@ fun KolzaiChatScreen() {
                                             color = TextMain, fontWeight = FontWeight.Medium)
                                         Text(photoUri?.lastPathSegment ?: "Нажми, чтобы выбрать изображение на телефоне",
                                             color = TextMuted, fontSize = 11.sp, modifier = Modifier.padding(top = 5.dp))
+                                        photoUri?.let { selectedPhoto ->
+                                            AsyncImage(
+                                                model = selectedPhoto,
+                                                contentDescription = "Выбранное фото",
+                                                modifier = Modifier.fillMaxWidth().height(180.dp).padding(top = 12.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
