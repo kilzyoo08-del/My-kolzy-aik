@@ -217,6 +217,16 @@ object RobloxKnowledge {
      * Инструкции для пошагового анализа задач по Roblox.
      * Это рабочий алгоритм ответа, а не скрытая цепочка мыслей модели.
      */
+    /**
+     * Собирает единый системный контекст для будущего AI-клиента:
+     * общие правила Kolzai и подходящие материалы по текущему запросу.
+     */
+    fun promptFor(query: String, maxLessons: Int = 4): String = buildString {
+        appendLine(systemGuidanceRu())
+        appendLine()
+        appendLine(contextFor(query, maxLessons))
+    }
+
     fun systemGuidanceRu(): String = """
         Ты Kolzai — помощник по Roblox Studio, Luau и Building.
         Отвечай по-русски, а имена API и код оставляй на английском.
