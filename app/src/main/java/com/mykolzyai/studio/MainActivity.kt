@@ -1,6 +1,8 @@
 package com.mykolzyai.studio
 
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -21,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 
 private val Bg = Color(0xFF212121)
 private val SurfaceDark = Color(0xFF2F2F2F)
@@ -76,6 +79,12 @@ fun KolzaiChatScreen() {
     var duration by remember { mutableStateOf("5 секунд") }
     var ratio by remember { mutableStateOf("16:9") }
     var photoUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var isGenerating by remember { mutableStateOf(false) }
+    var generationProgress by remember { mutableIntStateOf(0) }
+    var generatedVideoPath by remember { mutableStateOf<String?>(null) }
+    var generationError by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         photoUri = uri
     }
@@ -214,12 +223,61 @@ fun KolzaiChatScreen() {
                             }
                             item {
                                 Spacer(Modifier.height(6.dp))
-                                Button(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth().height(52.dp),
-                                    shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(
-                                        disabledContainerColor = Color(0xFF514B60), disabledContentColor = TextMain)) {
-                                    Text("Создать видео", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                Button(
+                                    onClick = {
+                                        if (!isGenerating && videoPrompt.isNotBlank()) {
+                                            isGenerating = true
+                                            generationProgress = 0
+                                            generatedVideoPath = null
+                                            generationError = null
+                                            val promptSnapshot = videoPrompt.trim()
+                                            val secondsSnapshot = duration.substringBefore(" ").toIntOrNull() ?: 5
+                                            val ratioSnapshot = ratio
+                                            Thread {
+                                                try {
+                                                    val result = LocalVideoGenerator.generate(
+                                                        context = context,
+                                                        prompt = promptSnapshot,
+                                                        durationSeconds = secondsSnapshot,
+                                                        aspectRatio = ratioSnapshot
+                                                    ) { value ->
+                                                        mainHandler.post { generationProgress = value }
+                                                    }
+                                                    mainHandler.post {
+                                                        generatedVideoPath = result.file.absolutePath
+                                                        isGenerating = false
+                                                    }
+                                                } catch (error: Exception) {
+                                                    mainHandler.post {
+                                                        generationError = error.message ?: "Не удалось создать видео."
+                                                        isGenerating = false
+                                                    }
+                                                }
+                                            }.start()
+                                        }
+                                    },
+                                    enabled = !isGenerating && videoPrompt.isNotBlank(),
+                                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                                    shape = RoundedCornerShape(16.dp)
+                                ) {
+                                    Text(if (isGenerating) "Создаю… $generationProgress%" else "Создать видео",
+                                        fontSize = 16.sp, fontWeight = FontWeight.Bold)
                                 }
-                                Text("Генерация пока не подключена. Сейчас мы создаём интерфейс; следующим шагом подключим модель и сервер Kolzai.",
+                                if (isGenerating) {
+                                    LinearProgressIndicator(progress = { generationProgress / 100f },
+                                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp))
+                                    Text("Локальный рендеринг кадров и кодирование MP4. Не закрывай приложение.",
+                                        color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
+                                }
+                                generationError?.let { errorText ->
+                                    Text("Ошибка: $errorText", color = Color(0xFFFF8A80),
+                                        fontSize = 12.sp, modifier = Modifier.padding(top = 9.dp))
+                                }
+                                generatedVideoPath?.let { path ->
+                                    Text("Видео готово: $path", color = Color(0xFF9FE3B0),
+                                        fontSize = 12.sp, modifier = Modifier.padding(top = 9.dp))
+                                }
+                                Text("Важно: это локальный процедурный рендерер графической сцены, а не нейросеть text-to-video. Выбранное фото пока сохраняется как вложение интерфейса и ещё не используется при рендеринге.",
                                     color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 9.dp))
                             }
                         }
