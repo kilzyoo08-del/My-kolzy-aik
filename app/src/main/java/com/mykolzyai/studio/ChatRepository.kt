@@ -50,6 +50,15 @@ internal object ChatRequestPolicy {
         }
         return id
     }
+
+    fun normalizeAccessToken(value: String?): String {
+        val token = value?.trim().orEmpty()
+        require(token.isNotEmpty()) { "Для чата требуется короткоживущий токен авторизации." }
+        require(token.length <= 4_096 && token.none { it.isISOControl() }) {
+            "Некорректный токен авторизации."
+        }
+        return token
+    }
 }
 
 /**
@@ -71,6 +80,11 @@ class ChatRepository(
             throw ChatApiException(null, "Сервер чата не настроен. Нужен HTTPS URL backend.")
         }
 
+        val accessToken = try {
+            ChatRequestPolicy.normalizeAccessToken(accessTokenProvider())
+        } catch (error: IllegalArgumentException) {
+            throw ChatApiException(401, error.message ?: "Требуется авторизация для чата.")
+        }
         val connection = URL("${baseUrl.trim().trimEnd('/')}/v1/chat")
             .openConnection() as HttpURLConnection
         try {
@@ -84,13 +98,7 @@ class ChatRepository(
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
             connection.setRequestProperty("Cache-Control", "no-store")
 
-            val accessToken = accessTokenProvider()?.trim()?.takeIf { it.isNotEmpty() }
-            if (accessToken != null) {
-                require(accessToken.length <= 4_096 && accessToken.none { it.isISOControl() }) {
-                    "Некорректный токен авторизации."
-                }
-                connection.setRequestProperty("Authorization", "Bearer $accessToken")
-            }
+            connection.setRequestProperty("Authorization", "Bearer $accessToken")
 
             val requestBody = JSONObject()
                 .put("message", normalizedMessage)
