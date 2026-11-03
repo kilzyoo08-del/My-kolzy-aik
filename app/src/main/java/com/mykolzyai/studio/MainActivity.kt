@@ -194,7 +194,7 @@ fun KolzaiChatScreen() {
                                         isThinking = true
                                         thinkingStage = when {
                                             image != null -> "Фото прикреплено; визуальная модель пока не подключена…"
-                                            chatRepository.isConfigured() -> "Отправляю запрос в backend Kolzai…"
+                                            chatRepository.isConfigured() -> "Подготовка HTTPS backend (нужен runtime-токен)…"
                                             wantsWebSearch(question) -> "Поиск страниц в интернете…"
                                             else -> "Анализ запроса и поиск в локальной базе…"
                                         }
@@ -234,7 +234,7 @@ fun KolzaiChatScreen() {
                         }
                         Text(
                             if (isThinking) thinkingStage
-                            else if (chatRepository.isConfigured()) "HTTPS backend задан · доступ проверяется сервером"
+                            else if (chatRepository.isConfigured()) "HTTPS backend задан · runtime-токен пока не подключён"
                             else "Автономный режим · локальная база знаний",
                             color = if (isThinking) Accent else TextMuted, fontSize = 10.sp,
                             modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 7.dp))
@@ -420,7 +420,7 @@ fun KolzaiChatScreen() {
                             }
                             item {
                                 Text(
-                                    if (chatRepository.isConfigured()) "Ответы запрашиваются через HTTPS backend Kolzai."
+                                    if (chatRepository.isConfigured()) "HTTPS backend URL задан; без runtime-токена запросы не отправляются."
                                     else "Сейчас работает автономный режим; серверная языковая модель не настроена.",
                                     color = TextMuted, fontSize = 13.sp,
                                     modifier = Modifier.padding(vertical = 8.dp)
