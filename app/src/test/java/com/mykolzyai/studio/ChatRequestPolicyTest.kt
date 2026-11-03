@@ -46,7 +46,7 @@ class ChatRequestPolicyTest {
         assertEquals("short-lived-token", ChatRequestPolicy.normalizeAccessToken(" short-lived-token "))
         assertFails { ChatRequestPolicy.normalizeAccessToken(null) }
         assertFails { ChatRequestPolicy.normalizeAccessToken("  ") }
-        assertFails { ChatRequestPolicy.normalizeAccessToken("token\\nwith-line-break") }
+        assertFails { ChatRequestPolicy.normalizeAccessToken("token\nwith-line-break") }
         assertFails { ChatRequestPolicy.normalizeAccessToken("x".repeat(4_097)) }
     }
 
