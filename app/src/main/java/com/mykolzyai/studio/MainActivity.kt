@@ -118,6 +118,7 @@ fun KolzaiChatScreen() {
     var showHistory by remember { mutableStateOf(false) }
     var messages by remember { mutableStateOf(listOf<ChatMessage>()) }
     var conversationId by remember { mutableStateOf<String?>(null) }
+    var chatSession by remember { mutableIntStateOf(0) }
     var videoPrompt by remember { mutableStateOf("") }
     var duration by remember { mutableStateOf("5 секунд") }
     var ratio by remember { mutableStateOf("16:9") }
@@ -155,8 +156,11 @@ fun KolzaiChatScreen() {
                     actions = {
                         Text("＋", color = TextMain, fontSize = 27.sp,
                             modifier = Modifier.clickable {
+                                chatSession += 1
                                 messages = emptyList()
                                 conversationId = null
+                                isThinking = false
+                                thinkingStage = ""
                                 draft = ""
                                 chatPhotoUri = null
                                 videoPrompt = ""
@@ -188,6 +192,7 @@ fun KolzaiChatScreen() {
                                         val question = draft.trim().ifBlank { "Расскажи, что можно сделать с прикреплённым фото." }
                                         val image = chatPhotoUri
                                         val previousConversationId = conversationId
+                                        val sessionSnapshot = chatSession
                                         messages = messages + ChatMessage(question, true, image)
                                         draft = ""
                                         chatPhotoUri = null
@@ -217,10 +222,12 @@ fun KolzaiChatScreen() {
                                                 "Не удалось связаться с сервером Kolzai. Проверь интернет и настройки backend, затем попробуй ещё раз."
                                             }
                                             mainHandler.post {
-                                                conversationId = nextConversationId
-                                                messages = messages + ChatMessage(answer, false)
-                                                isThinking = false
-                                                thinkingStage = ""
+                                                if (chatSession == sessionSnapshot) {
+                                                    conversationId = nextConversationId
+                                                    messages = messages + ChatMessage(answer, false)
+                                                    isThinking = false
+                                                    thinkingStage = ""
+                                                }
                                             }
                                         }.start()
                                     }
@@ -246,8 +253,11 @@ fun KolzaiChatScreen() {
                 if (showHistory) {
                     Column(Modifier.width(210.dp).fillMaxHeight().background(Color(0xFF191919)).padding(14.dp)) {
                         Text("Новый чат", color = TextMain, modifier = Modifier.clickable {
+                            chatSession += 1
                             messages = emptyList()
                             conversationId = null
+                            isThinking = false
+                            thinkingStage = ""
                             showHistory = false
                         }.padding(vertical = 14.dp))
                         Divider(color = Color.DarkGray)
