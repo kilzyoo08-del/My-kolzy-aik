@@ -46,8 +46,8 @@ def main():
 
     work = Path(args.work_dir)
     work.mkdir(parents=True, exist_ok=True)
-    # Each stage expands the cumulative training pool: 10%, 25%, 50%, then 100%.
-    fractions = (0.10, 0.25, 0.50, 1.0)
+    # Five cumulative stages: 10k, 20k, 30k, 40k, then all 50k when input has 50k rows.
+    fractions = (0.20, 0.40, 0.60, 0.80, 1.0)
     previous_checkpoint = ""
     trainer = Path(__file__).with_name("train.py")
 
@@ -72,7 +72,7 @@ def main():
         if previous_checkpoint:
             command += ["--init-checkpoint", previous_checkpoint]
 
-        print(f"\n=== Stage {index}/4: {count} examples ===", flush=True)
+        print(f"\n=== Stage {index}/5: {count} examples ===", flush=True)
         subprocess.run(command, check=True)
         if not stage_checkpoint.is_file() or stage_checkpoint.stat().st_size == 0:
             raise SystemExit(f"Stage {index} did not produce a checkpoint; previous checkpoint is preserved")
