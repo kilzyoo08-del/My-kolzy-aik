@@ -117,6 +117,7 @@ fun KolzaiChatScreen() {
     var selectedTab by remember { mutableStateOf("Чат") }
     var showHistory by remember { mutableStateOf(false) }
     var messages by remember { mutableStateOf(listOf<ChatMessage>()) }
+    var conversationId by remember { mutableStateOf<String?>(null) }
     var videoPrompt by remember { mutableStateOf("") }
     var duration by remember { mutableStateOf("5 секунд") }
     var ratio by remember { mutableStateOf("16:9") }
@@ -127,6 +128,7 @@ fun KolzaiChatScreen() {
     var generationError by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    val chatRepository = remember { ChatRepository() }
     val chatPhotoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> chatPhotoUri = uri }
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         photoUri = uri
@@ -152,8 +154,14 @@ fun KolzaiChatScreen() {
                     },
                     actions = {
                         Text("＋", color = TextMain, fontSize = 27.sp,
-                            modifier = Modifier.clickable { messages = emptyList(); videoPrompt = ""; photoUri = null }
-                                .padding(horizontal = 18.dp))
+                            modifier = Modifier.clickable {
+                                messages = emptyList()
+                                conversationId = null
+                                draft = ""
+                                chatPhotoUri = null
+                                videoPrompt = ""
+                                photoUri = null
+                            }.padding(horizontal = 18.dp))
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Bg, titleContentColor = TextMain)
                 )
@@ -168,8 +176,9 @@ fun KolzaiChatScreen() {
                             Text("＋", color = TextMuted, fontSize = 25.sp, modifier = Modifier.clickable { chatPhotoPicker.launch("image/*") }.padding(end = 10.dp))
                             Box(Modifier.weight(1f)) {
                                 if (draft.isEmpty()) Text("Спроси Kolzai", color = TextMuted)
-                                BasicTextField(value = draft, onValueChange = { draft = it },
-                                    modifier = Modifier.fillMaxWidth(),
+                                BasicTextField(value = draft, onValueChange = {
+                                    draft = it.take(ChatRequestPolicy.MAX_MESSAGE_CHARS)
+                                }, modifier = Modifier.fillMaxWidth(),
                                     textStyle = LocalTextStyle.current.copy(color = TextMain, fontSize = 16.sp), maxLines = 5)
                             }
                             Spacer(Modifier.width(10.dp))
@@ -178,22 +187,37 @@ fun KolzaiChatScreen() {
                                     if (!isThinking && (draft.isNotBlank() || chatPhotoUri != null)) {
                                         val question = draft.trim().ifBlank { "Расскажи, что можно сделать с прикреплённым фото." }
                                         val image = chatPhotoUri
+                                        val previousConversationId = conversationId
                                         messages = messages + ChatMessage(question, true, image)
                                         draft = ""
                                         chatPhotoUri = null
                                         isThinking = true
-                                        thinkingStage = if (wantsWebSearch(question)) "Поиск страниц в интернете…" else "Анализ запроса и поиск в локальной базе…"
+                                        thinkingStage = when {
+                                            image != null -> "Фото прикреплено; визуальная модель пока не подключена…"
+                                            chatRepository.isConfigured() -> "Отправляю запрос в backend Kolzai…"
+                                            wantsWebSearch(question) -> "Поиск страниц в интернете…"
+                                            else -> "Анализ запроса и поиск в локальной базе…"
+                                        }
                                         Thread {
+                                            var nextConversationId = previousConversationId
                                             val answer = try {
-                                                if (image == null && wantsWebSearch(question)) {
-                                                    webSearchReply(question)
-                                                } else {
-                                                    offlineKnowledgeReply(question, image != null)
+                                                when {
+                                                    image != null -> offlineKnowledgeReply(question, hasImage = true)
+                                                    chatRepository.isConfigured() -> {
+                                                        val response = chatRepository.send(question, previousConversationId)
+                                                        nextConversationId = response.conversationId
+                                                        response.reply
+                                                    }
+                                                    wantsWebSearch(question) -> webSearchReply(question)
+                                                    else -> offlineKnowledgeReply(question)
                                                 }
-                                            } catch (error: Exception) {
-                                                "Не удалось выполнить поиск: ${error.message ?: "проверь подключение к интернету"}. Попробуй ещё раз позже."
+                                            } catch (error: ChatApiException) {
+                                                error.message ?: "Сервер чата вернул ошибку. Попробуй ещё раз."
+                                            } catch (_: Exception) {
+                                                "Не удалось связаться с сервером Kolzai. Проверь интернет и настройки backend, затем попробуй ещё раз."
                                             }
                                             mainHandler.post {
+                                                conversationId = nextConversationId
                                                 messages = messages + ChatMessage(answer, false)
                                                 isThinking = false
                                                 thinkingStage = ""
@@ -208,7 +232,10 @@ fun KolzaiChatScreen() {
                             AsyncImage(model = selected, contentDescription = "Фото к сообщению",
                                 modifier = Modifier.size(58.dp).padding(top = 5.dp))
                         }
-                        Text(if (isThinking) thinkingStage else "Локальная база знаний · ИИ-модель не подключена",
+                        Text(
+                            if (isThinking) thinkingStage
+                            else if (chatRepository.isConfigured()) "HTTPS backend задан · доступ проверяется сервером"
+                            else "Автономный режим · локальная база знаний",
                             color = if (isThinking) Accent else TextMuted, fontSize = 10.sp,
                             modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 7.dp))
                     }
@@ -219,7 +246,9 @@ fun KolzaiChatScreen() {
                 if (showHistory) {
                     Column(Modifier.width(210.dp).fillMaxHeight().background(Color(0xFF191919)).padding(14.dp)) {
                         Text("Новый чат", color = TextMain, modifier = Modifier.clickable {
-                            messages = emptyList(); showHistory = false
+                            messages = emptyList()
+                            conversationId = null
+                            showHistory = false
                         }.padding(vertical = 14.dp))
                         Divider(color = Color.DarkGray)
                         Text("История появится здесь", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 16.dp))
@@ -390,8 +419,12 @@ fun KolzaiChatScreen() {
                                 }
                             }
                             item {
-                                Text("Подключение языковой модели добавим отдельно.", color = TextMuted,
-                                    fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
+                                Text(
+                                    if (chatRepository.isConfigured()) "Ответы запрашиваются через HTTPS backend Kolzai."
+                                    else "Сейчас работает автономный режим; серверная языковая модель не настроена.",
+                                    color = TextMuted, fontSize = 13.sp,
+                                    modifier = Modifier.padding(vertical = 8.dp)
+                                )
                             }
                         }
                     }
