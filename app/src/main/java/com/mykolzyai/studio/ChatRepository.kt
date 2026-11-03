@@ -75,7 +75,8 @@ class ChatRepository(
 
     fun send(message: String, conversationId: String? = null): ChatApiResponse {
         val normalizedMessage = ChatRequestPolicy.normalizeMessage(message)
-        val normalizedConversationId = ChatRequestPolicy.normalizeConversationId(conversationId)
+        val requestConversationId = ChatRequestPolicy.normalizeConversationId(conversationId)
+            ?: UUID.randomUUID().toString()
         if (!isConfigured()) {
             throw ChatApiException(null, "Сервер чата не настроен. Нужен HTTPS URL backend.")
         }
@@ -102,10 +103,8 @@ class ChatRepository(
 
             val requestBody = JSONObject()
                 .put("message", normalizedMessage)
+                .put("conversationId", requestConversationId)
                 .put("mode", "roblox")
-                .apply {
-                    normalizedConversationId?.let { put("conversationId", it) }
-                }
                 .toString()
             connection.outputStream.use {
                 it.write(requestBody.toByteArray(Charsets.UTF_8))
@@ -126,8 +125,8 @@ class ChatRepository(
 
             val returnedId = json.optString("conversationId").takeIf { it.isNotBlank() }
             val resolvedId = try {
-                ChatRequestPolicy.normalizeConversationId(returnedId ?: normalizedConversationId)
-                    ?: UUID.randomUUID().toString()
+                ChatRequestPolicy.normalizeConversationId(returnedId ?: requestConversationId)
+                    ?: requestConversationId
             } catch (_: IllegalArgumentException) {
                 throw ChatApiException(status, "Сервер вернул некорректный идентификатор диалога.")
             }
