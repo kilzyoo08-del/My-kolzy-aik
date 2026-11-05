@@ -26,11 +26,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 
-private val Bg = Color(0xFF212121)
-private val SurfaceDark = Color(0xFF2F2F2F)
-private val TextMain = Color(0xFFECECEC)
-private val TextMuted = Color(0xFF9B9B9B)
-private val Accent = Color(0xFFB9A4FF)
+private val Bg = Color(0xFFFFFFFF)
+private val SurfaceDark = Color(0xFFF4F4F4)
+private val TextMain = Color(0xFF202123)
+private val TextMuted = Color(0xFF737373)
+private val Accent = Color(0xFF202123)
 
 data class ChatMessage(val text: String, val fromUser: Boolean, val imageUri: android.net.Uri? = null)
 
@@ -50,7 +50,7 @@ private fun offlineKnowledgeReply(query: String, hasImage: Boolean = false): Str
 
     LocalReasoningEngine.solveMathQuestion(query)?.let { result ->
         return buildString {
-            appendLine("Решение Kolzai")
+            appendLine("Решение")
             appendLine()
             appendLine("Разберём выражение по порядку действий:")
             result.steps.forEachIndexed { index, step ->
@@ -69,7 +69,7 @@ private fun offlineKnowledgeReply(query: String, hasImage: Boolean = false): Str
     }
 
     return buildString {
-        appendLine("Разбор по базе знаний Roblox · найдено: ${matches.size}")
+        appendLine("Справка по Roblox · найдено: ${matches.size}")
         matches.forEachIndexed { index, lesson ->
             if (index > 0) appendLine()
             appendLine("${index + 1}. ${lesson.titleRu}")
@@ -142,8 +142,8 @@ fun KolzaiChatScreen() {
                 TopAppBar(
                     title = {
                         Column {
-                            Text("Kolzai", fontWeight = FontWeight.Bold, fontSize = 21.sp)
-                            Text(if (selectedTab == "Видео") "Создание видео" else "ИИ-помощник", color = TextMuted, fontSize = 11.sp)
+                            Text("Centerion", fontWeight = FontWeight.Bold, fontSize = 21.sp)
+                            Text(if (selectedTab == "Видео") "Создание видео" else "Новый чат", color = TextMuted, fontSize = 11.sp)
                         }
                     },
                     navigationIcon = {
@@ -167,13 +167,13 @@ fun KolzaiChatScreen() {
                         ) {
                             Text("＋", color = TextMuted, fontSize = 25.sp, modifier = Modifier.clickable { chatPhotoPicker.launch("image/*") }.padding(end = 10.dp))
                             Box(Modifier.weight(1f)) {
-                                if (draft.isEmpty()) Text("Спроси Kolzai", color = TextMuted)
+                                if (draft.isEmpty()) Text("Спроси Centerion", color = TextMuted)
                                 BasicTextField(value = draft, onValueChange = { draft = it },
                                     modifier = Modifier.fillMaxWidth(),
                                     textStyle = LocalTextStyle.current.copy(color = TextMain, fontSize = 16.sp), maxLines = 5)
                             }
                             Spacer(Modifier.width(10.dp))
-                            Box(Modifier.size(38.dp).background(if (draft.isBlank() && chatPhotoUri == null) Color(0xFF555555) else TextMain, CircleShape)
+                            Box(Modifier.size(38.dp).background(if (draft.isBlank() && chatPhotoUri == null) Color(0xFFD9D9D9) else TextMain, CircleShape)
                                 .clickable {
                                     if (!isThinking && (draft.isNotBlank() || chatPhotoUri != null)) {
                                         val question = draft.trim().ifBlank { "Расскажи, что можно сделать с прикреплённым фото." }
@@ -208,7 +208,7 @@ fun KolzaiChatScreen() {
                             AsyncImage(model = selected, contentDescription = "Фото к сообщению",
                                 modifier = Modifier.size(58.dp).padding(top = 5.dp))
                         }
-                        Text(if (isThinking) thinkingStage else "Локальная база знаний · ИИ-модель не подключена",
+                        Text(if (isThinking) thinkingStage else "Centerion · помощник",
                             color = if (isThinking) Accent else TextMuted, fontSize = 10.sp,
                             modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 7.dp))
                     }
@@ -217,7 +217,7 @@ fun KolzaiChatScreen() {
         ) { padding ->
             Row(Modifier.fillMaxSize().padding(padding)) {
                 if (showHistory) {
-                    Column(Modifier.width(210.dp).fillMaxHeight().background(Color(0xFF191919)).padding(14.dp)) {
+                    Column(Modifier.width(210.dp).fillMaxHeight().background(Color(0xFFF7F7F7)).padding(14.dp)) {
                         Text("Новый чат", color = TextMain, modifier = Modifier.clickable {
                             messages = emptyList(); showHistory = false
                         }.padding(vertical = 14.dp))
@@ -229,7 +229,7 @@ fun KolzaiChatScreen() {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)
                         .background(SurfaceDark, RoundedCornerShape(24.dp)).padding(4.dp)) {
                         listOf("Чат", "Видео").forEach { tab ->
-                            Box(Modifier.weight(1f).background(if (selectedTab == tab) Color(0xFF55515F) else Color.Transparent,
+                            Box(Modifier.weight(1f).background(if (selectedTab == tab) Color(0xFFE8E8E8) else Color.Transparent,
                                 RoundedCornerShape(20.dp)).clickable { selectedTab = tab }.padding(vertical = 11.dp),
                                 contentAlignment = Alignment.Center) {
                                 Text(if (tab == "Видео") "🎬 Видео" else "✦ Чат",
@@ -364,7 +364,7 @@ fun KolzaiChatScreen() {
                             Spacer(Modifier.height(18.dp))
                             Text("Чем могу помочь?", color = TextMain, fontSize = 25.sp, fontWeight = FontWeight.SemiBold)
                             Spacer(Modifier.height(9.dp))
-                            Text("Kolzai — твой ИИ-помощник", color = TextMuted, fontSize = 14.sp)
+                            Text("Centerion", color = TextMuted, fontSize = 14.sp)
                             Spacer(Modifier.height(26.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 SuggestionChip("Напиши текст") { draft = "Помоги написать текст" }
@@ -390,7 +390,7 @@ fun KolzaiChatScreen() {
                                 }
                             }
                             item {
-                                Text("Подключение языковой модели добавим отдельно.", color = TextMuted,
+                                Text("Ответы могут быть ограничены текущими возможностями модели.", color = TextMuted,
                                     fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
                             }
                         }
@@ -403,7 +403,7 @@ fun KolzaiChatScreen() {
 
 @Composable
 private fun ChoicePill(label: String, selected: Boolean, onClick: () -> Unit) {
-    Surface(color = if (selected) Color(0xFF514B60) else SurfaceDark,
+    Surface(color = if (selected) Color(0xFFE8E8E8) else SurfaceDark,
         shape = RoundedCornerShape(18.dp), modifier = Modifier.clickable(onClick = onClick)) {
         Text(label, color = TextMain, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
     }
