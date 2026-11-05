@@ -24,14 +24,15 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Gradle
+      # The repository does not currently contain gradlew/gradle-wrapper.jar.
+      # Install a compatible Gradle distribution explicitly instead of invoking a missing wrapper.
+      - name: Set up Gradle 8.10.2
         uses: gradle/actions/setup-gradle@v4
-
-      - name: Verify Gradle wrapper
-        run: chmod +x ./gradlew
+        with:
+          gradle-version: '8.10.2'
 
       - name: Build debug APK
-        run: ./gradlew :app:assembleDebug --stacktrace
+        run: gradle :app:assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
