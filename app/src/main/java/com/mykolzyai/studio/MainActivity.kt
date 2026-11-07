@@ -117,6 +117,10 @@ fun KolzaiChatScreen() {
     var selectedTab by remember { mutableStateOf("Чат") }
     var showHistory by remember { mutableStateOf(false) }
     var messages by remember { mutableStateOf(listOf<ChatMessage>()) }
+    var currentConversationId by remember { mutableStateOf<String?>(null) }
+    var remoteConversations by remember { mutableStateOf(emptyList<CenterionApi.Conversation>()) }
+    var isAuthenticated by remember { mutableStateOf(false) }
+    var authChecked by remember { mutableStateOf(false) }
     var videoPrompt by remember { mutableStateOf("") }
     var duration by remember { mutableStateOf("5 секунд") }
     var ratio by remember { mutableStateOf("16:9") }
@@ -127,6 +131,30 @@ fun KolzaiChatScreen() {
     var generationError by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
+
+    LaunchedEffect(Unit) {
+        if (!CenterionApi.isConfigured()) {
+            authChecked = true
+        } else {
+            Thread {
+                val restored = CenterionApi.restoreSession(context)
+                mainHandler.post {
+                    isAuthenticated = restored
+                    authChecked = true
+                }
+            }.start()
+        }
+    }
+
+    if (CenterionApi.isConfigured() && !authChecked) {
+        CenterionLoadingScreen()
+        return
+    }
+    if (CenterionApi.isConfigured() && !isAuthenticated) {
+        CenterionAuthScreen(onAuthenticated = { isAuthenticated = true })
+        return
+    }
+
     val chatPhotoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri -> chatPhotoUri = uri }
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         photoUri = uri
@@ -148,12 +176,33 @@ fun KolzaiChatScreen() {
                     },
                     navigationIcon = {
                         Text("☰", color = TextMain, fontSize = 23.sp,
-                            modifier = Modifier.clickable { showHistory = !showHistory }.padding(horizontal = 18.dp))
+                            modifier = Modifier.clickable {
+                                showHistory = !showHistory
+                                if (showHistory && CenterionApi.isConfigured()) {
+                                    Thread {
+                                        val loaded = try { CenterionApi.listConversations(context) } catch (_: Exception) { emptyList() }
+                                        mainHandler.post { remoteConversations = loaded }
+                                    }.start()
+                                }
+                            }.padding(horizontal = 18.dp))
                     },
                     actions = {
+                        if (CenterionApi.isConfigured()) {
+                            Text("Выйти", color = TextMuted, fontSize = 12.sp,
+                                modifier = Modifier.clickable {
+                                    CenterionApi.signOut(context)
+                                    isAuthenticated = false
+                                    currentConversationId = null
+                                    messages = emptyList()
+                                }.padding(horizontal = 8.dp))
+                        }
                         Text("＋", color = TextMain, fontSize = 27.sp,
-                            modifier = Modifier.clickable { messages = emptyList(); videoPrompt = ""; photoUri = null }
-                                .padding(horizontal = 18.dp))
+                            modifier = Modifier.clickable {
+                                messages = emptyList()
+                                currentConversationId = null
+                                videoPrompt = ""
+                                photoUri = null
+                            }.padding(horizontal = 18.dp))
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Bg, titleContentColor = TextMain)
                 )
@@ -178,22 +227,35 @@ fun KolzaiChatScreen() {
                                     if (!isThinking && (draft.isNotBlank() || chatPhotoUri != null)) {
                                         val question = draft.trim().ifBlank { "Расскажи, что можно сделать с прикреплённым фото." }
                                         val image = chatPhotoUri
+                                        val conversationSnapshot = currentConversationId
                                         messages = messages + ChatMessage(question, true, image)
                                         draft = ""
                                         chatPhotoUri = null
                                         isThinking = true
-                                        thinkingStage = if (wantsWebSearch(question)) "Поиск страниц в интернете…" else "Анализ запроса и поиск в локальной базе…"
+                                        thinkingStage = when {
+                                            image != null -> "Подготовка изображения…"
+                                            CenterionApi.isConfigured() -> "Centerion анализирует запрос…"
+                                            wantsWebSearch(question) -> "Поиск страниц в интернете…"
+                                            else -> "Поиск в локальной базе…"
+                                        }
                                         Thread {
+                                            var newConversationId: String? = null
                                             val answer = try {
-                                                if (image == null && wantsWebSearch(question)) {
-                                                    webSearchReply(question)
-                                                } else {
-                                                    offlineKnowledgeReply(question, image != null)
+                                                when {
+                                                    image != null -> offlineKnowledgeReply(question, true)
+                                                    CenterionApi.isConfigured() && !wantsWebSearch(question) -> {
+                                                        val reply = CenterionApi.chat(context, question, conversationSnapshot)
+                                                        newConversationId = reply.conversationId
+                                                        reply.answer
+                                                    }
+                                                    wantsWebSearch(question) -> webSearchReply(question)
+                                                    else -> offlineKnowledgeReply(question)
                                                 }
                                             } catch (error: Exception) {
-                                                "Не удалось выполнить поиск: ${error.message ?: "проверь подключение к интернету"}. Попробуй ещё раз позже."
+                                                "Не удалось связаться с Centerion API: ${error.message ?: "проверь подключение и настройки сервера"}."
                                             }
                                             mainHandler.post {
+                                                if (!newConversationId.isNullOrBlank()) currentConversationId = newConversationId
                                                 messages = messages + ChatMessage(answer, false)
                                                 isThinking = false
                                                 thinkingStage = ""
@@ -208,7 +270,10 @@ fun KolzaiChatScreen() {
                             AsyncImage(model = selected, contentDescription = "Фото к сообщению",
                                 modifier = Modifier.size(58.dp).padding(top = 5.dp))
                         }
-                        Text(if (isThinking) thinkingStage else "Centerion · помощник",
+                        Text(
+                            if (isThinking) thinkingStage
+                            else if (CenterionApi.isConfigured()) "Centerion · облачное ядро"
+                            else "Centerion · автономный режим",
                             color = if (isThinking) Accent else TextMuted, fontSize = 10.sp,
                             modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 7.dp))
                     }
@@ -219,10 +284,34 @@ fun KolzaiChatScreen() {
                 if (showHistory) {
                     Column(Modifier.width(210.dp).fillMaxHeight().background(Color(0xFFF7F7F7)).padding(14.dp)) {
                         Text("Новый чат", color = TextMain, modifier = Modifier.clickable {
-                            messages = emptyList(); showHistory = false
+                            messages = emptyList()
+                            currentConversationId = null
+                            showHistory = false
                         }.padding(vertical = 14.dp))
-                        Divider(color = Color.DarkGray)
-                        Text("История появится здесь", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 16.dp))
+                        Divider(color = Color.LightGray)
+                        Text("История", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 14.dp, bottom = 8.dp))
+                        if (remoteConversations.isEmpty()) {
+                            Text("Сохранённые диалоги появятся здесь после первого сообщения.", color = TextMuted, fontSize = 12.sp)
+                        } else {
+                            remoteConversations.forEach { conversation ->
+                                Text(
+                                    conversation.title,
+                                    color = TextMain,
+                                    fontSize = 13.sp,
+                                    maxLines = 2,
+                                    modifier = Modifier.fillMaxWidth().clickable {
+                                        Thread {
+                                            val loaded = try { CenterionApi.loadConversation(context, conversation.id) } catch (_: Exception) { emptyList() }
+                                            mainHandler.post {
+                                                currentConversationId = conversation.id
+                                                messages = loaded.map { (role, content) -> ChatMessage(content, role == "user") }
+                                                showHistory = false
+                                            }
+                                        }.start()
+                                    }.padding(vertical = 9.dp)
+                                )
+                            }
+                        }
                     }
                 }
                 Column(Modifier.weight(1f).fillMaxHeight()) {
@@ -413,5 +502,95 @@ private fun ChoicePill(label: String, selected: Boolean, onClick: () -> Unit) {
 private fun SuggestionChip(label: String, onClick: () -> Unit) {
     Surface(color = SurfaceDark, shape = RoundedCornerShape(20.dp), modifier = Modifier.clickable(onClick = onClick)) {
         Text(label, color = TextMain, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 13.dp, vertical = 10.dp))
+    }
+}
+
+
+@Composable
+private fun CenterionLoadingScreen() {
+    MaterialTheme {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator()
+                Spacer(Modifier.height(14.dp))
+                Text("Подключаем Centerion…")
+            }
+        }
+    }
+}
+
+@Composable
+private fun CenterionAuthScreen(onAuthenticated: () -> Unit) {
+    val context = LocalContext.current
+    val handler = remember { Handler(Looper.getMainLooper()) }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var isSignUp by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    MaterialTheme {
+        Scaffold(containerColor = Bg) { padding ->
+            Column(
+                Modifier.fillMaxSize().padding(padding).padding(horizontal = 24.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("Centerion", color = TextMain, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "Войди, чтобы пользоваться облачной языковой моделью и синхронизированной памятью.",
+                    color = TextMuted, fontSize = 14.sp, modifier = Modifier.padding(top = 10.dp, bottom = 24.dp)
+                )
+                OutlinedTextField(
+                    value = email, onValueChange = { email = it },
+                    label = { Text("Электронная почта") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = password, onValueChange = { password = it },
+                    label = { Text("Пароль") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp,
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) }
+                Spacer(Modifier.height(18.dp))
+                Button(
+                    onClick = {
+                        if (email.isBlank() || password.length < 6) {
+                            error = "Введи email и пароль не короче 6 символов."
+                        } else {
+                            busy = true
+                            error = null
+                            Thread {
+                                val failure = try {
+                                    if (isSignUp) CenterionApi.signUp(context, email, password)
+                                    else CenterionApi.signIn(context, email, password)
+                                    null
+                                } catch (exception: Exception) {
+                                    exception.message ?: "Не удалось выполнить вход."
+                                }
+                                handler.post {
+                                    busy = false
+                                    if (failure == null) onAuthenticated() else error = failure
+                                }
+                            }.start()
+                        }
+                    },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().height(50.dp)
+                ) {
+                    if (busy) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    else Text(if (isSignUp) "Создать аккаунт" else "Войти")
+                }
+                TextButton(onClick = { isSignUp = !isSignUp; error = null }) {
+                    Text(if (isSignUp) "Уже есть аккаунт? Войти" else "Нет аккаунта? Зарегистрироваться")
+                }
+                Text(
+                    "Ключ OpenAI и секретный ключ Supabase не хранятся в приложении.",
+                    color = TextMuted, fontSize = 11.sp, modifier = Modifier.padding(top = 20.dp)
+                )
+            }
+        }
     }
 }
