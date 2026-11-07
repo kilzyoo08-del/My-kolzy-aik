@@ -327,7 +327,9 @@ fun KolzaiChatScreen() {
                         }
                     }
 
-                    if (selectedTab == "Память") {\n                        CenterionMemoryScreen()\n                    } else if (selectedTab == "Видео") {
+                    if (selectedTab == "Память") {
+                        CenterionMemoryScreen()
+                    } else if (selectedTab == "Видео") {
                         LazyColumn(Modifier.fillMaxSize().padding(horizontal = 18.dp),
                             contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                             item {
