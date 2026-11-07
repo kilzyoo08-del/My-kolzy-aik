@@ -171,7 +171,7 @@ fun KolzaiChatScreen() {
                     title = {
                         Column {
                             Text("Centerion", fontWeight = FontWeight.Bold, fontSize = 21.sp)
-                            Text(if (selectedTab == "Видео") "Создание видео" else "Новый чат", color = TextMuted, fontSize = 11.sp)
+                            Text(when (selectedTab) { "Видео" -> "Создание видео"; "Память" -> "Личные знания"; else -> "Новый чат" }, color = TextMuted, fontSize = 11.sp)
                         }
                     },
                     navigationIcon = {
@@ -317,17 +317,17 @@ fun KolzaiChatScreen() {
                 Column(Modifier.weight(1f).fillMaxHeight()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)
                         .background(SurfaceDark, RoundedCornerShape(24.dp)).padding(4.dp)) {
-                        listOf("Чат", "Видео").forEach { tab ->
+                        listOf("Чат", "Память", "Видео").forEach { tab ->
                             Box(Modifier.weight(1f).background(if (selectedTab == tab) Color(0xFFE8E8E8) else Color.Transparent,
                                 RoundedCornerShape(20.dp)).clickable { selectedTab = tab }.padding(vertical = 11.dp),
                                 contentAlignment = Alignment.Center) {
-                                Text(if (tab == "Видео") "🎬 Видео" else "✦ Чат",
+                                Text(when (tab) { "Видео" -> "🎬 Видео"; "Память" -> "🧠 Память"; else -> "✦ Чат" },
                                     color = TextMain, fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.Normal)
                             }
                         }
                     }
 
-                    if (selectedTab == "Видео") {
+                    if (selectedTab == "Память") {\n                        CenterionMemoryScreen()\n                    } else if (selectedTab == "Видео") {
                         LazyColumn(Modifier.fillMaxSize().padding(horizontal = 18.dp),
                             contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                             item {
