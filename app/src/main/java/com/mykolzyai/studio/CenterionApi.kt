@@ -38,6 +38,14 @@ object CenterionApi {
         val updatedAt: String
     )
 
+    data class MemoryDocument(
+        val id: String,
+        val title: String,
+        val sourcePath: String,
+        val content: String,
+        val updatedAt: String
+    )
+
     private data class Session(
         val accessToken: String,
         val refreshToken: String,
@@ -134,6 +142,48 @@ object CenterionApi {
         }
     }
 
+    fun searchMemory(context: Context, query: String, limit: Int = 5): List<MemoryDocument> {
+        val safeLimit = limit.coerceIn(1, 8)
+        val encodedQuery = java.net.URLEncoder.encode(query.trim(), "UTF-8")
+        val response = apiRequest(context, "GET", "/v1/memory?q=$encodedQuery&limit=$safeLimit")
+        val rows = response.optJSONArray("memories") ?: JSONArray()
+        return (0 until rows.length()).mapNotNull { index ->
+            val row = rows.optJSONObject(index) ?: return@mapNotNull null
+            MemoryDocument(
+                id = row.optString("id"),
+                title = row.optString("title"),
+                sourcePath = row.optString("source_path"),
+                content = row.optString("content"),
+                updatedAt = row.optString("updated_at")
+            )
+        }
+    }
+
+    fun saveMemory(
+        context: Context,
+        title: String,
+        sourcePath: String,
+        content: String
+    ): MemoryDocument {
+        val payload = JSONObject()
+            .put("title", title)
+            .put("source_path", sourcePath)
+            .put("content", content)
+        val response = apiRequest(context, "POST", "/v1/memory", payload)
+        val row = response.optJSONObject("memory") ?: throw IOException("Сервер не вернул сохранённый документ памяти.")
+        return MemoryDocument(
+            id = row.optString("id"),
+            title = row.optString("title"),
+            sourcePath = row.optString("source_path"),
+            content = "",
+            updatedAt = row.optString("updated_at")
+        )
+    }
+
+    fun deleteMemory(context: Context, memoryId: String) {
+        apiRequest(context, "DELETE", "/v1/memory/$memoryId")
+    }
+
     fun saveFeedback(
         context: Context,
         rating: Int,
@@ -180,6 +230,7 @@ object CenterionApi {
         when (method) {
             "GET" -> builder.get()
             "PATCH" -> builder.patch((payload ?: JSONObject()).toString().toRequestBody(jsonType))
+            "DELETE" -> builder.delete()
             else -> builder.post((payload ?: JSONObject()).toString().toRequestBody(jsonType))
         }
         return execute(builder.build())
@@ -218,11 +269,20 @@ object CenterionApi {
                 JSONObject()
             }
             if (!response.isSuccessful) {
-                val message = json.optString("msg")
-                    .ifBlank { json.optString("message") }
-                    .ifBlank { json.optString("error_description") }
+                val errorObject = json.optJSONObject("error")
+                val errorCode = errorObject?.optString("code").orEmpty()
                     .ifBlank { json.optString("error") }
-                    .ifBlank { "HTTP ${response.code}" }
+                val message = when (errorCode) {
+                    "model_unavailable" -> "Языковое ядро Centerion ещё не подключено. История и память доступны, но ответы чата пока отключены."
+                    "unauthorized" -> "Сессия истекла. Войди в аккаунт Centerion ещё раз."
+                    "not_found" -> "Запрошенный объект не найден или недоступен."
+                    else -> errorObject?.optString("message").orEmpty()
+                        .ifBlank { json.optString("msg") }
+                        .ifBlank { json.optString("message") }
+                        .ifBlank { json.optString("error_description") }
+                        .ifBlank { errorCode }
+                        .ifBlank { "HTTP ${response.code}" }
+                }
                 throw IOException(message)
             }
             return json
