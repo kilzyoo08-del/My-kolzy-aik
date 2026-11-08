@@ -257,6 +257,7 @@ fun KolzaiChatScreen() {
                                         val image = chatPhotoUri
                                         val conversationSnapshot = currentConversationId
                                         val historySnapshot = messages.takeLast(6).map { (if (it.fromUser) "user" else "assistant") to it.text }
+                                        val localKernelAnswer = centerionLocalKernelReply(question)
                                         messages = messages + ChatMessage(question, true, image)
                                         draft = ""
                                         chatPhotoUri = null
@@ -264,7 +265,7 @@ fun KolzaiChatScreen() {
                                         thinkingStage = when {
                                             image != null -> "Подготовка изображения…"
                                             wantsWebSearch(question) -> "Поиск страниц в интернете…"
-                                            centerionLocalKernelReply(question) != null -> "Работа локального ядра Centerion…"
+                                            localKernelAnswer != null -> "Работа локального ядра Centerion…"
                                             CenterionApi.isConfigured() -> "Подключение к Centerion API…"
                                             hasLocalKolai -> "Запуск локальной Kolai…"
                                             else -> "Поиск в локальной базе…"
@@ -275,7 +276,7 @@ fun KolzaiChatScreen() {
                                                 when {
                                                     image != null -> offlineKnowledgeReply(question, true)
                                                     wantsWebSearch(question) -> webSearchReply(question)
-                                                    centerionLocalKernelReply(question) != null -> centerionLocalKernelReply(question)!!
+                                                    localKernelAnswer != null -> localKernelAnswer
                                                     CenterionApi.isConfigured() -> {
                                                         try {
                                                             val reply = CenterionApi.chat(context, question, conversationSnapshot)
