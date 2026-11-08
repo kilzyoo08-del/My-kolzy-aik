@@ -76,7 +76,7 @@ object KolaiOnnxEngine {
         val inputName = activeSession.inputNames.iterator().next()
         val outputName = activeSession.outputNames.iterator().next()
         val output = ByteArrayOutputStream()
-        repeat(maxNewBytes.coerceIn(1, 512)) {
+        for (step in 0 until maxNewBytes.coerceIn(1, 512)) {
             val inputIds = ids.takeLast(CONTEXT_BYTES).map { it.toLong() }.toLongArray()
             val tensor = OnnxTensor.createTensor(
                 environment,
@@ -101,7 +101,7 @@ object KolaiOnnxEngine {
                 result.close()
                 tensor.close()
             }
-            if (nextToken == EOS || nextToken >= 256) return@repeat
+            if (nextToken == EOS || nextToken >= 256) break
             output.write(nextToken)
             ids.add(nextToken)
         }
