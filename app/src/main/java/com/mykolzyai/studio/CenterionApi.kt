@@ -21,8 +21,8 @@ import javax.crypto.spec.GCMParameterSpec
 /**
  * Centerion cloud API client.
  *
- * Only the Supabase publishable key is included in the APK. OpenAI and
- * Supabase service-role credentials remain on the server.
+ * Only the Supabase publishable key is included in the APK. No paid LLM
+ * provider is used; service-role credentials remain server-side.
  */
 object CenterionApi {
     data class ChatReply(
