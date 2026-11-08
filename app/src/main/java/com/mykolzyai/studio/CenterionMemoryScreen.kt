@@ -22,6 +22,7 @@ fun CenterionMemoryScreen() {
     var content by remember { mutableStateOf("") }
     var documents by remember { mutableStateOf(emptyList<CenterionApi.MemoryDocument>()) }
     var busy by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<CenterionApi.MemoryDocument?>(null) }
     var status by remember { mutableStateOf("Личная память аккаунта. Записи видны только владельцу.") }
 
     fun perform(action: () -> String) {
@@ -44,8 +45,10 @@ fun CenterionMemoryScreen() {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text("Память Centerion", style = MaterialTheme.typography.headlineSmall)
-        Text("Сохраняй заметки и находи их позже. Это хранилище знаний, а не обучение весов модели.",
-            fontSize = 13.sp)
+        Text(
+            "Личные заметки аккаунта. Сохранение в память не изменяет веса модели.",
+            fontSize = 13.sp
+        )
         OutlinedTextField(
             value = query, onValueChange = { query = it },
             label = { Text("Поиск по памяти") }, modifier = Modifier.fillMaxWidth(),
@@ -73,8 +76,11 @@ fun CenterionMemoryScreen() {
             label = { Text("Текст заметки") }, modifier = Modifier.fillMaxWidth(), minLines = 3)
         Button(
             onClick = {
+                val titleToSave = title.trim()
+                val sourceToSave = source.trim()
+                val contentToSave = content.trim()
                 perform {
-                    val saved = CenterionApi.saveMemory(context, title, source, content)
+                    val saved = CenterionApi.saveMemory(context, titleToSave, sourceToSave, contentToSave)
                     handler.post {
                         title = ""
                         content = ""
@@ -88,6 +94,14 @@ fun CenterionMemoryScreen() {
         ) { Text("Сохранить в память") }
 
         Text(status, fontSize = 12.sp)
+        if (documents.isEmpty()) {
+            Text(
+                if (query.isBlank()) "Пока нет загруженных записей. Выполни поиск или сохрани первую заметку."
+                else "По этому запросу записей не найдено.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 13.sp
+            )
+        }
         documents.forEach { doc ->
             ElevatedCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -95,8 +109,39 @@ fun CenterionMemoryScreen() {
                     Text("Источник: ${doc.sourcePath}", fontSize = 11.sp)
                     if (doc.content.isNotBlank()) Text(doc.content, fontSize = 13.sp)
                     Text("Обновлено: ${doc.updatedAt}", fontSize = 10.sp)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = { pendingDelete = doc }, enabled = !busy) {
+                            Text("Удалить")
+                        }
+                    }
                 }
             }
         }
+    }
+
+    pendingDelete?.let { doc ->
+        AlertDialog(
+            onDismissRequest = { if (!busy) pendingDelete = null },
+            title = { Text("Удалить запись?") },
+            text = { Text("«${doc.title}» будет удалена из личной памяти этого аккаунта.") },
+            confirmButton = {
+                TextButton(
+                    enabled = !busy,
+                    onClick = {
+                        pendingDelete = null
+                        perform {
+                            CenterionApi.deleteMemory(context, doc.id)
+                            handler.post { documents = documents.filterNot { it.id == doc.id } }
+                            "Запись удалена."
+                        }
+                    }
+                ) { Text("Удалить") }
+            },
+            dismissButton = {
+                TextButton(enabled = !busy, onClick = { pendingDelete = null }) {
+                    Text("Отмена")
+                }
+            }
+        )
     }
 }
