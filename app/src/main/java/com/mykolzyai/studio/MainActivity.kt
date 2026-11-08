@@ -234,7 +234,7 @@ fun KolzaiChatScreen() {
                                         isThinking = true
                                         thinkingStage = when {
                                             image != null -> "Подготовка изображения…"
-                                            CenterionApi.isConfigured() -> "Centerion анализирует запрос…"
+                                            CenterionApi.isConfigured() -> "Проверка доступности Centerion API…"
                                             wantsWebSearch(question) -> "Поиск страниц в интернете…"
                                             else -> "Поиск в локальной базе…"
                                         }
@@ -252,7 +252,7 @@ fun KolzaiChatScreen() {
                                                     else -> offlineKnowledgeReply(question)
                                                 }
                                             } catch (error: Exception) {
-                                                "Не удалось связаться с Centerion API: ${error.message ?: "проверь подключение и настройки сервера"}."
+                                                error.message ?: "Не удалось связаться с Centerion API."
                                             }
                                             mainHandler.post {
                                                 if (!newConversationId.isNullOrBlank()) currentConversationId = newConversationId
@@ -272,7 +272,7 @@ fun KolzaiChatScreen() {
                         }
                         Text(
                             if (isThinking) thinkingStage
-                            else if (CenterionApi.isConfigured()) "Centerion · облачное ядро"
+                            else if (CenterionApi.isConfigured()) "Centerion · API подключён, модель недоступна"
                             else "Centerion · автономный режим",
                             color = if (isThinking) Accent else TextMuted, fontSize = 10.sp,
                             modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 7.dp))
