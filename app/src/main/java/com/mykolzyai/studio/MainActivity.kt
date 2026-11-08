@@ -41,6 +41,33 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private fun centerionLocalKernelReply(query: String): String? {
+    LocalReasoningEngine.solveMathQuestion(query)?.let { result ->
+        return buildString {
+            appendLine("Решение")
+            appendLine()
+            result.steps.forEachIndexed { index, step -> appendLine("${index + 1}. $step") }
+            appendLine()
+            append("Ответ: ${result.answer}")
+        }
+    }
+    val matches = RobloxKnowledge.search(query, limit = 3)
+    if (matches.isEmpty()) return null
+    return buildString {
+        appendLine("Справка по Roblox · найдено: ${matches.size}")
+        matches.forEachIndexed { index, lesson ->
+            if (index > 0) appendLine()
+            appendLine("${index + 1}. ${lesson.titleRu}")
+            appendLine(lesson.explanationRu)
+            appendLine("Пример Luau:")
+            appendLine(lesson.exampleLuau)
+            appendLine("Совет для Building: ${lesson.buildingTipRu}")
+        }
+        appendLine()
+        append("Это проверяемый результат локального ядра Centerion.")
+    }
+}
+
 /**
  * Локальный справочный ответ без сетевого запроса и без имитации работы LLM.
  * Использует только встроенные уроки RobloxKnowledge.
@@ -131,6 +158,7 @@ fun KolzaiChatScreen() {
     var generationError by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    val hasLocalKolai = remember { KolaiOnnxEngine.isAvailable(context) }
 
     LaunchedEffect(Unit) {
         if (!CenterionApi.isConfigured()) {
@@ -146,11 +174,11 @@ fun KolzaiChatScreen() {
         }
     }
 
-    if (CenterionApi.isConfigured() && !authChecked) {
+    if (CenterionApi.isConfigured() && !authChecked && !hasLocalKolai) {
         CenterionLoadingScreen()
         return
     }
-    if (CenterionApi.isConfigured() && !isAuthenticated) {
+    if (CenterionApi.isConfigured() && !isAuthenticated && !hasLocalKolai) {
         CenterionAuthScreen(onAuthenticated = { isAuthenticated = true })
         return
     }
@@ -228,14 +256,17 @@ fun KolzaiChatScreen() {
                                         val question = draft.trim().ifBlank { "Расскажи, что можно сделать с прикреплённым фото." }
                                         val image = chatPhotoUri
                                         val conversationSnapshot = currentConversationId
+                                        val historySnapshot = messages.takeLast(6).map { (if (it.fromUser) "user" else "assistant") to it.text }
                                         messages = messages + ChatMessage(question, true, image)
                                         draft = ""
                                         chatPhotoUri = null
                                         isThinking = true
                                         thinkingStage = when {
                                             image != null -> "Подготовка изображения…"
-                                            CenterionApi.isConfigured() -> "Проверка доступности Centerion API…"
                                             wantsWebSearch(question) -> "Поиск страниц в интернете…"
+                                            centerionLocalKernelReply(question) != null -> "Работа локального ядра Centerion…"
+                                            CenterionApi.isConfigured() -> "Подключение к Centerion API…"
+                                            hasLocalKolai -> "Запуск локальной Kolai…"
                                             else -> "Поиск в локальной базе…"
                                         }
                                         Thread {
@@ -243,16 +274,27 @@ fun KolzaiChatScreen() {
                                             val answer = try {
                                                 when {
                                                     image != null -> offlineKnowledgeReply(question, true)
-                                                    CenterionApi.isConfigured() && !wantsWebSearch(question) -> {
-                                                        val reply = CenterionApi.chat(context, question, conversationSnapshot)
-                                                        newConversationId = reply.conversationId
-                                                        reply.answer
-                                                    }
                                                     wantsWebSearch(question) -> webSearchReply(question)
+                                                    centerionLocalKernelReply(question) != null -> centerionLocalKernelReply(question)!!
+                                                    CenterionApi.isConfigured() -> {
+                                                        try {
+                                                            val reply = CenterionApi.chat(context, question, conversationSnapshot)
+                                                            newConversationId = reply.conversationId
+                                                            reply.answer
+                                                        } catch (apiError: Exception) {
+                                                            if (KolaiOnnxEngine.isAvailable(context)) {
+                                                                KolaiOnnxEngine.generate(context, question, historySnapshot)
+                                                            } else {
+                                                                throw apiError
+                                                            }
+                                                        }
+                                                    }
+                                                    KolaiOnnxEngine.isAvailable(context) ->
+                                                        KolaiOnnxEngine.generate(context, question, historySnapshot)
                                                     else -> offlineKnowledgeReply(question)
                                                 }
                                             } catch (error: Exception) {
-                                                error.message ?: "Не удалось связаться с Centerion API."
+                                                error.message ?: "Не удалось получить ответ от Centerion."
                                             }
                                             mainHandler.post {
                                                 if (!newConversationId.isNullOrBlank()) currentConversationId = newConversationId
@@ -272,8 +314,9 @@ fun KolzaiChatScreen() {
                         }
                         Text(
                             if (isThinking) thinkingStage
-                            else if (CenterionApi.isConfigured()) "Centerion · API подключён, модель недоступна"
-                            else "Centerion · автономный режим",
+                            else if (hasLocalKolai) "Centerion · локальная Kolai"
+                            else if (CenterionApi.isConfigured()) "Centerion · API подключён, модель ожидается"
+                            else "Centerion · автономные локальные ядра",
                             color = if (isThinking) Accent else TextMuted, fontSize = 10.sp,
                             modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 7.dp))
                     }
