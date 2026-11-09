@@ -1,9 +1,17 @@
 -- REVIEW ONLY — do not execute against production without explicit approval.
--- Read-only audit on 2026-11-08 confirmed anon and authenticated have TRUNCATE,
--- REFERENCES and TRIGGER privileges on the five public Centerion tables.
--- RLS does not protect TRUNCATE. The existing owner RLS policies are not changed here.
--- The Edge Function uses the server-side service_role after verifying the JWT and
--- deriving user_id/owner_id from auth.getUser(); service_role grants are untouched.
+-- Read-only audit on 2026-11-09 confirmed anon and authenticated have broad table
+-- privileges (including TRUNCATE, REFERENCES, TRIGGER and MAINTAIN) on the five
+-- public Centerion tables. RLS does not protect TRUNCATE.
+--
+-- The Edge Function verifies the Supabase JWT, derives user_id/owner_id from
+-- auth.getUser(), then uses the server-side service_role. No owner ID is trusted
+-- from the request body. This script does not alter RLS policies or JWT settings.
+--
+-- Existing tables: remove all anon grants; keep only row-level CRUD for
+-- authenticated users, with existing owner RLS policies continuing to apply.
+-- Future tables: default-deny anon/authenticated for both observed creators
+-- (postgres and supabase_admin). Add explicit grants only after a table has
+-- a reviewed owner policy. Service-role grants are not modified.
 
 BEGIN;
 
@@ -23,8 +31,6 @@ REVOKE ALL PRIVILEGES ON TABLE
   public.centerion_memory_documents
 FROM authenticated;
 
--- Preserve only row-level CRUD for authenticated clients; existing RLS policies
--- continue to enforce per-user ownership. No TRUNCATE/REFERENCES/TRIGGER is granted.
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
   public.centerion_conversations,
   public.centerion_messages,
@@ -33,16 +39,32 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
   public.centerion_memory_documents
 TO authenticated;
 
+-- Default privileges currently grant broad access on future public tables.
+-- These schema-scoped revokes do not affect storage/graphql or other schemas.
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE ALL PRIVILEGES ON TABLES FROM anon;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE ALL PRIVILEGES ON TABLES FROM authenticated;
+
+ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+  REVOKE ALL PRIVILEGES ON TABLES FROM anon;
+ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+  REVOKE ALL PRIVILEGES ON TABLES FROM authenticated;
+
 COMMIT;
 
 -- Post-application verification (run separately after an approved deployment):
 -- SELECT c.relname,
 --   has_table_privilege('anon', c.oid, 'TRUNCATE') AS anon_truncate,
 --   has_table_privilege('authenticated', c.oid, 'TRUNCATE') AS authenticated_truncate,
+--   has_table_privilege('anon', c.oid, 'SELECT') AS anon_select,
 --   has_table_privilege('authenticated', c.oid, 'SELECT') AS authenticated_select,
 --   has_table_privilege('authenticated', c.oid, 'INSERT') AS authenticated_insert
 -- FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
 -- WHERE n.nspname='public' AND c.relkind='r' AND c.relname LIKE 'centerion_%';
-
--- Expected: both TRUNCATE columns false; authenticated SELECT/INSERT true.
--- This file does not alter RLS, policies, JWT verification, secrets, or table data.
+--
+-- Expected for current tables: anon privileges false; authenticated CRUD true;
+-- both TRUNCATE flags false. Also inspect pg_default_acl for postgres and
+-- supabase_admin in schema public: anon/authenticated entries must be absent.
+--
+-- This review file is not a production migration and has not been executed.
