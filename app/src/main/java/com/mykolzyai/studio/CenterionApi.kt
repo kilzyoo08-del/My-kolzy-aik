@@ -11,12 +11,68 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import java.net.URI
 import java.security.KeyStore
 import java.util.concurrent.TimeUnit
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+
+internal object CenterionApiInputPolicy {
+    const val MAX_CHAT_MESSAGE_CHARS = 12_000
+    const val MAX_MEMORY_QUERY_CHARS = 500
+    const val MAX_MEMORY_TITLE_CHARS = 200
+    const val MAX_MEMORY_SOURCE_CHARS = 500
+    const val MAX_MEMORY_CONTENT_CHARS = 12_000
+    const val MAX_FEEDBACK_COMMENT_CHARS = 2_000
+
+    private val uuidPattern = Regex(
+        "(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    )
+
+    fun isSecureBaseUrl(value: String): Boolean {
+        val uri = runCatching { URI(value.trim()) }.getOrNull() ?: return false
+        return uri.isAbsolute &&
+            uri.scheme.equals("https", ignoreCase = true) &&
+            !uri.host.isNullOrBlank() &&
+            uri.rawUserInfo == null &&
+            uri.rawQuery == null &&
+            uri.rawFragment == null &&
+            uri.path.orEmpty().let { it.isEmpty() || it == "/" } &&
+            (uri.port == -1 || uri.port in 1..65_535)
+    }
+
+    fun requiredText(value: String, maxChars: Int, label: String): String {
+        val normalized = value.trim()
+        require(normalized.isNotEmpty()) { "$label не должно быть пустым." }
+        require(normalized.length <= maxChars) {
+            "$label слишком длинное. Максимум — $maxChars символов."
+        }
+        return normalized
+    }
+
+    fun optionalUuid(value: String?, label: String): String? {
+        val id = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        require(uuidPattern.matches(id)) { "Некорректный идентификатор: $label." }
+        return id
+    }
+
+    fun requiredUuid(value: String, label: String): String =
+        optionalUuid(value, label) ?: throw IllegalArgumentException("Не указан идентификатор: $label.")
+
+    fun validateRating(rating: Int) {
+        require(rating in 1..5) { "Оценка должна быть от 1 до 5." }
+    }
+
+    fun optionalComment(value: String?): String? {
+        val comment = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        require(comment.length <= MAX_FEEDBACK_COMMENT_CHARS) {
+            "Комментарий слишком длинный. Максимум — $MAX_FEEDBACK_COMMENT_CHARS символов."
+        }
+        return comment
+    }
+}
 
 /**
  * Centerion cloud API client.
@@ -71,7 +127,7 @@ object CenterionApi {
         get() = BuildConfig.CENTERION_SUPABASE_PUBLISHABLE_KEY
 
     fun isConfigured(): Boolean =
-        baseUrl.startsWith("https://") && publishableKey.isNotBlank()
+        CenterionApiInputPolicy.isSecureBaseUrl(baseUrl) && publishableKey.isNotBlank()
 
     fun signIn(context: Context, email: String, password: String) {
         requireConfigured()
@@ -109,8 +165,14 @@ object CenterionApi {
     }
 
     fun chat(context: Context, message: String, conversationId: String? = null): ChatReply {
-        val payload = JSONObject().put("message", message)
-        if (!conversationId.isNullOrBlank()) payload.put("conversation_id", conversationId)
+        val normalizedMessage = CenterionApiInputPolicy.requiredText(
+            message, CenterionApiInputPolicy.MAX_CHAT_MESSAGE_CHARS, "Сообщение"
+        )
+        val normalizedConversationId = CenterionApiInputPolicy.optionalUuid(
+            conversationId, "диалога"
+        )
+        val payload = JSONObject().put("message", normalizedMessage)
+        if (normalizedConversationId != null) payload.put("conversation_id", normalizedConversationId)
         val response = apiRequest(context, "POST", "/v1/chat", payload)
         return ChatReply(
             answer = response.optString("answer"),
@@ -134,7 +196,8 @@ object CenterionApi {
     }
 
     fun loadConversation(context: Context, conversationId: String): List<Pair<String, String>> {
-        val response = apiRequest(context, "GET", "/v1/conversations/$conversationId/messages")
+        val safeConversationId = CenterionApiInputPolicy.requiredUuid(conversationId, "диалога")
+        val response = apiRequest(context, "GET", "/v1/conversations/$safeConversationId/messages")
         val rows = response.optJSONArray("messages") ?: JSONArray()
         return (0 until rows.length()).mapNotNull { index ->
             val row = rows.optJSONObject(index) ?: return@mapNotNull null
@@ -143,8 +206,11 @@ object CenterionApi {
     }
 
     fun searchMemory(context: Context, query: String, limit: Int = 5): List<MemoryDocument> {
+        val normalizedQuery = CenterionApiInputPolicy.requiredText(
+            query, CenterionApiInputPolicy.MAX_MEMORY_QUERY_CHARS, "Поисковый запрос"
+        )
         val safeLimit = limit.coerceIn(1, 8)
-        val encodedQuery = java.net.URLEncoder.encode(query.trim(), "UTF-8")
+        val encodedQuery = java.net.URLEncoder.encode(normalizedQuery, "UTF-8")
         val response = apiRequest(context, "GET", "/v1/memory?q=$encodedQuery&limit=$safeLimit")
         val rows = response.optJSONArray("memories") ?: JSONArray()
         return (0 until rows.length()).mapNotNull { index ->
@@ -165,10 +231,19 @@ object CenterionApi {
         sourcePath: String,
         content: String
     ): MemoryDocument {
+        val normalizedTitle = CenterionApiInputPolicy.requiredText(
+            title, CenterionApiInputPolicy.MAX_MEMORY_TITLE_CHARS, "Заголовок"
+        )
+        val normalizedSource = CenterionApiInputPolicy.requiredText(
+            sourcePath, CenterionApiInputPolicy.MAX_MEMORY_SOURCE_CHARS, "Источник"
+        )
+        val normalizedContent = CenterionApiInputPolicy.requiredText(
+            content, CenterionApiInputPolicy.MAX_MEMORY_CONTENT_CHARS, "Содержимое"
+        )
         val payload = JSONObject()
-            .put("title", title)
-            .put("source_path", sourcePath)
-            .put("content", content)
+            .put("title", normalizedTitle)
+            .put("source_path", normalizedSource)
+            .put("content", normalizedContent)
         val response = apiRequest(context, "POST", "/v1/memory", payload)
         val row = response.optJSONObject("memory") ?: throw IOException("Сервер не вернул сохранённый документ памяти.")
         return MemoryDocument(
@@ -181,7 +256,8 @@ object CenterionApi {
     }
 
     fun deleteMemory(context: Context, memoryId: String) {
-        apiRequest(context, "DELETE", "/v1/memory/$memoryId")
+        val safeMemoryId = CenterionApiInputPolicy.requiredUuid(memoryId, "памяти")
+        apiRequest(context, "DELETE", "/v1/memory/$safeMemoryId")
     }
 
     fun saveFeedback(
@@ -191,10 +267,14 @@ object CenterionApi {
         messageId: String?,
         comment: String? = null
     ) {
+        CenterionApiInputPolicy.validateRating(rating)
+        val safeConversationId = CenterionApiInputPolicy.optionalUuid(conversationId, "диалога")
+        val safeMessageId = CenterionApiInputPolicy.optionalUuid(messageId, "сообщения")
+        val safeComment = CenterionApiInputPolicy.optionalComment(comment)
         val payload = JSONObject().put("rating", rating)
-        if (!conversationId.isNullOrBlank()) payload.put("conversation_id", conversationId)
-        if (!messageId.isNullOrBlank()) payload.put("message_id", messageId)
-        if (!comment.isNullOrBlank()) payload.put("comment", comment)
+        if (safeConversationId != null) payload.put("conversation_id", safeConversationId)
+        if (safeMessageId != null) payload.put("message_id", safeMessageId)
+        if (safeComment != null) payload.put("comment", safeComment)
         apiRequest(context, "POST", "/v1/feedback", payload)
     }
 
