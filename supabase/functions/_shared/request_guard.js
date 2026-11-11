@@ -17,7 +17,7 @@ export async function readJsonObject(request, maxBytes = 32_000) {
   const contentLength = request.headers.get("content-length");
   let declaredLength = null;
   if (contentLength !== null) {
-    if (!/^\\d+$/.test(contentLength)) {
+    if (!/^\d+$/.test(contentLength)) {
       throw new Response("invalid_content_length", { status: 400 });
     }
     declaredLength = Number(contentLength);
