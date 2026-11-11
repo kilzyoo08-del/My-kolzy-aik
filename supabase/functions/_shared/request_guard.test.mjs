@@ -80,6 +80,6 @@ test("Centerion still derives the owner from verified Supabase Auth, never reque
   const ownerPosition = source.indexOf("const userId = auth.user.id");
   const serviceRolePosition = source.indexOf("createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY");
   assert.ok(authPosition >= 0 && ownerPosition > authPosition && serviceRolePosition > ownerPosition);
-  assert.doesNotMatch(source, /body\\.(owner_id|user_id)/);
-  assert.match(source, /readJsonObject\\(req, MAX_BODY\\)/);
+  assert.doesNotMatch(source, /body\.(owner_id|user_id)/);
+  assert.match(source, /readJsonObject\(req, MAX_BODY\)/);
 });
