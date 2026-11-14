@@ -1,0 +1,27 @@
+name: Edge request guard tests
+
+on:
+  pull_request:
+    paths:
+      - "supabase/functions/_shared/**"
+      - "supabase/functions/centerion/**"
+      - ".github/workflows/edge-request-guard.yml"
+  push:
+    branches:
+      - "security/centerion-request-guard"
+
+permissions:
+  contents: read
+
+jobs:
+  request-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Run request guard and auth contract tests
+        run: node --test supabase/functions/_shared/request_guard.test.mjs
