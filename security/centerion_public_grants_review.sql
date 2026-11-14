@@ -51,6 +51,29 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
 ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
   REVOKE ALL PRIVILEGES ON TABLES FROM authenticated;
 
+-- Default privileges for future sequences and RPC functions were also audited
+-- on 2026-11-14. No current public sequence grants to anon/authenticated were
+-- found, but both roles still had default SELECT/UPDATE/USAGE on future
+-- sequences and EXECUTE on future public functions for postgres and
+-- supabase_admin. Deny by default; grant explicitly after reviewing each object.
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE ALL PRIVILEGES ON SEQUENCES FROM anon;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE ALL PRIVILEGES ON SEQUENCES FROM authenticated;
+ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+  REVOKE ALL PRIVILEGES ON SEQUENCES FROM anon;
+ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+  REVOKE ALL PRIVILEGES ON SEQUENCES FROM authenticated;
+
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE EXECUTE ON FUNCTIONS FROM anon;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE EXECUTE ON FUNCTIONS FROM authenticated;
+ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+  REVOKE EXECUTE ON FUNCTIONS FROM anon;
+ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+  REVOKE EXECUTE ON FUNCTIONS FROM authenticated;
+
 COMMIT;
 
 -- Post-application verification (run separately after an approved deployment):
@@ -64,7 +87,18 @@ COMMIT;
 -- WHERE n.nspname='public' AND c.relkind='r' AND c.relname LIKE 'centerion_%';
 --
 -- Expected for current tables: anon privileges false; authenticated CRUD true;
--- both TRUNCATE flags false. Also inspect pg_default_acl for postgres and
--- supabase_admin in schema public: anon/authenticated entries must be absent.
+-- both TRUNCATE flags false. Current public sequences have no direct grants to
+-- anon/authenticated. After applying the reviewed default ACL statements, the
+-- following query should return zero rows for client roles and object types
+-- r (tables), S (sequences), and f (functions):
+--
+-- SELECT r.rolname AS creator_role, d.defaclobjtype,
+--        x.grantee::regrole::text AS grantee, x.privilege_type
+-- FROM pg_default_acl d
+-- JOIN pg_roles r ON r.oid=d.defaclrole
+-- JOIN pg_namespace n ON n.oid=d.defaclnamespace
+-- CROSS JOIN LATERAL aclexplode(d.defaclacl) x
+-- WHERE n.nspname='public' AND d.defaclobjtype IN ('r','S','f')
+--   AND x.grantee::regrole::text IN ('anon','authenticated');
 --
 -- This review file is not a production migration and has not been executed.
